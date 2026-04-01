@@ -3,7 +3,7 @@ import { weaponsDB } from './weapons';
 import { armorsDB } from './armors';
 import { itemsDB } from './items';
 import { skillsDB, getDynamicSkill } from './skills';
-import { playerBag, currentTab, selectedIndex, getGroupedItems, getWeaponBoost, getArmorDefBoost, inventorySubState, replaceTargetIndex, type EquipmentItem } from './inventory'; 
+import { playerBag, currentTab, selectedIndex, getGroupedItems, getWeaponBoost, getArmorDefBoost, calculatePpMult, inventorySubState, replaceTargetIndex, type EquipmentItem, getGradeMultiplier } from './inventory'; 
 import { combatSubState, currentMenuIndex, combatMenuOptions, currentSkillIndex, pendingSkill, isIntroAnimating, introAnimationTimer, INTRO_ANIMATION_DURATION } from './combat';
 
 export const elementColors: Record<string, string> = { 'normal': '#bdc3c7', 'feu': '#e74c3c', 'eau': '#3498db', 'plante': '#2ecc71', 'poison': '#9b59b6' };
@@ -18,7 +18,7 @@ export const debugOptions = [
     "REGEN MAP (Appliquer)",
     "TOUT EQUIPEMENT (Lv.100)",
     "TOUS LES OBJETS (x5)",
-    "TOUTES LES SPES (Lv.100)" // Option 8
+    "TOUTES LES SPES (Lv.100)"
 ];
 
 export const UIManager = {
@@ -201,14 +201,17 @@ export const UIManager = {
                 const selectedItem = playerBag[currentTab][selectedIndex] as EquipmentItem;
                 if (currentTab === 'weapons') { 
                     const w = weaponsDB[selectedItem.id]; desc = w.description; extraInfo = `+${getWeaponBoost(selectedItem)} ATK`; 
-                    if (w.atkMultiplier) extraInfo += ` | +${Math.round(w.atkMultiplier * 100)}% ATK`;
-                    if (w.defMultiplier) extraInfo += ` | ${Math.round(w.defMultiplier * 100)}% DEF`;
-                    if (w.fixedPpPenalty) extraInfo += ` | -${Math.round(w.fixedPpPenalty * 100)}% PP`;
-                    if (w.poisonChanceBonus) extraInfo += ` | +Poison`; if (w.spAtkBonus) extraInfo += ` | Magie++`; if (w.healBonus) extraInfo += ` | Soins+`;
+                    if (w.atkMultiplier) extraInfo += ` | ${w.atkMultiplier > 0 ? '+' : ''}${Math.round(w.atkMultiplier * 100)}% ATK`;
+                    if (w.defMultiplier) extraInfo += ` | ${w.defMultiplier > 0 ? '+' : ''}${Math.round(w.defMultiplier * 100)}% DEF`;
+                    if (w.fixedPpPenalty) extraInfo += ` | -${Math.round(w.fixedPpPenalty * 100)}% PP Max`;
+                    if (w.spCostPenalty) extraInfo += ` | Spé Cost ${w.spCostPenalty > 0 ? '+' : ''}${Math.round(w.spCostPenalty * 100)}%`;
+                    if (w.spAtkBonus) extraInfo += ` | Magie++`; if (w.poisonChanceBonus) extraInfo += ` | +Poison`; if (w.fearChanceBonus) extraInfo += ` | +Terreur`;
                 }
                 else if (currentTab === 'armors') { 
                     const a = armorsDB[selectedItem.id]; desc = a.description; extraInfo = `+${getArmorDefBoost(selectedItem)} DEF`; 
-                    if (a.atkPenalty) extraInfo += ` | -${a.atkPenalty} ATK`; if (a.forceResist) extraInfo += ` | Bouclier Lourd`; if (a.invertLifesteal) extraInfo += ` | Épines Sang`;
+                    if (a.atkPenalty) extraInfo += ` | -${a.atkPenalty} ATK`; if (a.atkBonus) extraInfo += ` | +${Math.floor(a.atkBonus * getGradeMultiplier(selectedItem.grade))} ATK`;
+                    if (a.spCostPenalty) extraInfo += ` | Spé Cost ${a.spCostPenalty > 0 ? '+' : ''}${Math.round(a.spCostPenalty * 100)}%`;
+                    if (a.fearChanceBonus) extraInfo += ` | +Terreur`; if (a.forceResist) extraInfo += ` | Bouclier Lourd`; if (a.invertLifesteal) extraInfo += ` | Épines Sang`;
                 }
             }
 
@@ -260,11 +263,19 @@ export const UIManager = {
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.strokeRect(menuX, menuY, menuWidth, menuHeight);
         ctx.font = '22px Arial';
         
+        // --- NOUVEAUTÉ : Menus grisés sous effet de statut ---
+        const hasBrainrot = activePlayer.activeModifiers.includes('brainrot');
+        const hasRagebait = activePlayer.activeModifiers.includes('ragebait');
+
         if (combatSubState === 'ACTION_SELECT') {
             combatMenuOptions.forEach((option, index) => {
                 const textY = menuY + 40 + (index * 35);
+                let color = 'white';
+                if (index === 1 && hasBrainrot) color = 'gray'; // Spé grisée si Brainrot
+                if (index === 2 && hasRagebait) color = 'gray'; // Garde grisée si Ragebait
+                
                 if (index === currentMenuIndex) { ctx.fillStyle = '#f1c40f'; ctx.fillText(`▶  ${option}`, menuX + 30, textY); } 
-                else { ctx.fillStyle = 'white'; ctx.fillText(`    ${option}`, menuX + 30, textY); }
+                else { ctx.fillStyle = color; ctx.fillText(`    ${option}`, menuX + 30, textY); }
             });
         } 
         else if (combatSubState === 'SKILL_SELECT') {
@@ -275,8 +286,7 @@ export const UIManager = {
                 skills.forEach((sObj: any, index: number) => {
                     const dSkill = getDynamicSkill(sObj.id, sObj.level);
                     const textY = menuY + 40 + (index * 40);
-                    const wpnItem = activePlayer.equippedWeapon as EquipmentItem | null; const wpn = wpnItem ? weaponsDB[wpnItem.id] : null;
-                    const actualCost = Math.floor(dSkill.ppCost * (1 + (wpn?.spCostPenalty || 0)));
+                    const actualCost = Math.floor(dSkill.ppCost * calculatePpMult(activePlayer));
                     
                     const isSelected = index === currentSkillIndex; const hasEnoughPP = activePlayer.pp >= actualCost;
                     ctx.fillStyle = isSelected ? '#f1c40f' : (hasEnoughPP ? 'white' : 'gray');
@@ -300,7 +310,7 @@ export const UIManager = {
         ctx.fillStyle = '#7f8c8d'; ctx.font = 'italic 18px Arial'; ctx.fillText("Appuyez sur F5 pour ressusciter...", canvasWidth / 2, canvasHeight / 2 + 80); ctx.textAlign = 'left'; 
     },
 
-    drawDebugMenu(ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number, player: any, currentFloor: number, nextType: string, selectedIndex: number) {
+    drawDebugMenu(ctx: CanvasRenderingContext2D, _canvasWidth: number, _canvasHeight: number, _player: any, _currentFloor: number, nextType: string, selectedIndex: number) {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.85)'; ctx.fillRect(50, 50, 420, 480);
         ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 4; ctx.strokeRect(50, 50, 420, 480);
 
