@@ -1,0 +1,22 @@
+{
+  "name": "earthbound-battlebackgrounds",
+  "version": "0.0.1",
+  "description": "Earthbound Battle Backgrounds, in your browser!",
+  "devDependencies": {
+    "standard": "^17.0.0",
+    "string.prototype.padstart": "^3.1.0",
+    "vite": "^7.2.4",
+    "vite-plugin-arraybuffer": "^0.1.1"
+  },
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "vite build",
+    "lint": "standard *.js src/**/*.js --fix",
+    "prepublishOnly": "npm run build",
+    "start": "vite",
+    "watch": "vite build --watch"
+  },
+  "engines": {
+    "node": ">= 24.0.0"
+  }
+}

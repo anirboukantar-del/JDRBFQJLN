@@ -1,0 +1,5 @@
+{
+  "devDependencies": {
+    "vite-plugin-arraybuffer": "^0.1.4"
+  }
+}
