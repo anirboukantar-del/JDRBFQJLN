@@ -217,13 +217,32 @@ export class Player extends Entity {
 }
 
 export class Enemy extends Entity {
-    gangId: number; isMandatory: boolean; behavior: BehaviorType; aiState: AIState = 'PATROL'; spawnX: number; spawnY: number; patrolAngle: number = Math.random() * Math.PI * 2;
+    gangId: number; isMandatory: boolean;
+    behavior: BehaviorType; aiState: AIState = 'PATROL';
+    spawnX: number; spawnY: number; patrolAngle: number = Math.random() * Math.PI * 2;
+
     constructor(startX: number, startY: number, level: number, size: EntitySize, gangId: number, isMandatory: boolean) { 
-        const behaviors: BehaviorType[] = ['Berserker', 'Tank', 'Mage', 'Moyen']; const behavior = behaviors[Math.floor(Math.random() * behaviors.length)]; const mults = EnemyAI.getStatMultipliers(behavior); 
-        const baseHp = (30 + (level * 15)) * mults.hp; const basePp = (15 + (level * 5)) * mults.pp; const baseAtk = (20 + (level * 10)) * mults.atk; const baseDef = (10 + (level * 6)) * mults.def;
-        const sizePx = size === 'S' ? 30 : (size === 'M' ? 40 : 60); const elements = ['feu', 'eau', 'plante', 'normal', 'poison']; const randomElem = elements[Math.floor(Math.random() * elements.length)];
+        const behaviors: BehaviorType[] = ['Berserker', 'Tank', 'Mage', 'Moyen'];
+        const behavior = behaviors[Math.floor(Math.random() * behaviors.length)];
+        const mults = EnemyAI.getStatMultipliers(behavior); 
+
+        // --- CHANGEMENT : Courbe de statistiques plus indulgente au début ---
+        // Moins de HP et surtout moins de DEF de base au niveau 1, mais l'augmentation par niveau reste correcte
+        const baseHp = (20 + (level * 12)) * mults.hp;
+        const basePp = (10 + (level * 5)) * mults.pp;
+        const baseAtk = (15 + (level * 8)) * mults.atk;
+        const baseDef = (5 + (level * 5)) * mults.def;
+        // ----------------------------------------------------------------------
+
+        const sizePx = size === 'S' ? 30 : (size === 'M' ? 40 : 60);
+        const elements = ['feu', 'eau', 'plante', 'normal', 'poison'];
+        const randomElem = elements[Math.floor(Math.random() * elements.length)];
+        
         super(startX, startY, sizePx, sizePx, size, level, baseHp, basePp, baseAtk, baseDef, [], randomElem, randomElem); 
-        this.gangId = gangId; this.isMandatory = isMandatory; this.behavior = behavior; this.spawnX = startX; this.spawnY = startY; this.skills = EnemyAI.assignSkills(behavior, level, randomElem); this.name = behavior;
+        this.gangId = gangId; this.isMandatory = isMandatory; this.behavior = behavior;
+        this.spawnX = startX; this.spawnY = startY;
+        this.skills = EnemyAI.assignSkills(behavior, level, randomElem); 
+        this.name = behavior;
     }
     update() { if (currentGameState !== 'EXPLORE' || gracePeriodTimer > 0) return; EnemyAI.updateExploration(this, player); }
     drawStatsBars(ctx: CanvasRenderingContext2D) { const barWidth = this.width; const barX = this.x; const barY = this.y - 20; ctx.fillStyle = '#333'; ctx.fillRect(barX, barY, barWidth, 6); ctx.fillStyle = '#2ecc71'; ctx.fillRect(barX, barY, barWidth * Math.max(0, this.hp / this.maxHp), 6); ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.strokeRect(barX, barY, barWidth, 6); ctx.fillStyle = 'white'; ctx.font = 'bold 12px Arial'; ctx.fillText(`Lv.${this.level}`, barX - 35, barY + 7); }

@@ -8,13 +8,13 @@ export const EnemyAI = {
     getStatMultipliers(behavior: BehaviorType) {
         switch(behavior) {
             case 'Berserker': return { hp: 1.2, pp: 1.0, atk: 1.6, def: 0.6 }; 
-            case 'Tank':      return { hp: 1.6, pp: 0.8, atk: 0.8, def: 1.6 }; 
+            // CHANGEMENT : Baisse des multiplicateurs du Tank (était 1.6 et 1.6)
+            case 'Tank':      return { hp: 1.4, pp: 0.8, atk: 0.8, def: 1.3 }; 
             case 'Mage':      return { hp: 0.7, pp: 1.8, atk: 1.5, def: 0.7 }; 
             case 'Moyen': default: return { hp: 1.0, pp: 1.0, atk: 1.0, def: 1.0 };
         }
     },
 
-    // --- NOUVEAUTÉ : Choix Attaque vs Soutien ---
     assignSkills(behavior: BehaviorType, level: number, element: string): {id: string, level: number}[] {
         let assigned: {id: string, level: number}[] = [];
         const availableSkills = Object.values(skillsDB).filter(s => s.element === element || s.element === 'normal');
@@ -22,7 +22,6 @@ export const EnemyAI = {
         const atkSkills = availableSkills.filter(s => s.category === 'attaque');
         const supSkills = availableSkills.filter(s => s.category === 'soutien');
 
-        // Tous ont au moins une attaque de base
         assigned.push({ id: 'coup_puissant', level: Math.max(1, level) });
 
         if (behavior === 'Mage') {
@@ -30,20 +29,24 @@ export const EnemyAI = {
             if (supSkills.length > 0) assigned.push({ id: supSkills[Math.floor(Math.random() * supSkills.length)].id, level: Math.max(1, level) });
         } 
         else if (behavior === 'Tank') {
-            assigned.push({ id: 'ultra_garde', level: Math.max(1, level) }); // Le Tank adore l'Ultra Garde
+            // CHANGEMENT : Le Tank n'apprend Ultra Garde qu'à partir de l'étage 3 !
+            if (level >= 3) {
+                assigned.push({ id: 'ultra_garde', level: Math.max(1, level) }); 
+            }
             if (atkSkills.length > 0) assigned.push({ id: atkSkills[Math.floor(Math.random() * atkSkills.length)].id, level: Math.max(1, Math.floor(level * 0.7)) });
         }
         else if (behavior === 'Berserker') {
             if (atkSkills.length > 0) assigned.push({ id: atkSkills[Math.floor(Math.random() * atkSkills.length)].id, level: Math.max(1, level) });
             assigned.push({ id: 'frappe_terreur', level: Math.max(1, level) });
         }
-        else { // Moyen
+        else { 
             if (atkSkills.length > 0) assigned.push({ id: atkSkills[Math.floor(Math.random() * atkSkills.length)].id, level: Math.max(1, Math.floor(level * 0.8)) });
             if (Math.random() > 0.5 && supSkills.length > 0) assigned.push({ id: supSkills[Math.floor(Math.random() * supSkills.length)].id, level: Math.max(1, Math.floor(level * 0.8)) });
         }
         
         return assigned.slice(0, 4);
     },
+
 
     decideAction(enemy: any, ppMult: number): { type: 'ATTACK' | 'SKILL' | 'DEFEND', skill?: any } {
         const b = enemy.behavior as BehaviorType;
