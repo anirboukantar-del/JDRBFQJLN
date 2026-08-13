@@ -110,12 +110,33 @@ export const InventorySystem = {
                     return;
                 }
 
+                // VOL D'ARME
+                party.forEach(p => {
+                    if (p !== player && p.equippedWeapon === weaponItem) {
+                        p.equippedWeapon = null;
+                        p.hp = Math.min(p.hp, p.maxHp); 
+                        p.pp = Math.min(p.pp, p.totalMaxPp);
+                    }
+                });
+
                 player.equippedWeapon = weaponItem; 
                 player.hp = Math.min(player.hp, player.maxHp); 
                 player.pp = Math.min(player.pp, player.totalMaxPp); 
             }
             else if (currentTab === 'armors') { 
-                player.equippedArmor = playerBag.armors[selectedIndex]; 
+                // C'EST ICI QUE LA VARIABLE MANQUAIT !
+                const armorItem = playerBag.armors[selectedIndex];
+
+                // VOL D'ARMURE
+                party.forEach(p => {
+                    if (p !== player && p.equippedArmor === armorItem) {
+                        p.equippedArmor = null;
+                        p.hp = Math.min(p.hp, p.maxHp); 
+                        p.pp = Math.min(p.pp, p.totalMaxPp);
+                    }
+                });
+
+                player.equippedArmor = armorItem; 
                 player.hp = Math.min(player.hp, player.maxHp); 
                 player.pp = Math.min(player.pp, player.totalMaxPp); 
             }

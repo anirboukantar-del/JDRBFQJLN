@@ -190,15 +190,56 @@ export const UIManager = {
 
             for (let i = startIndex; i < endIndex; i++) {
                 const itemObj = actualList[i]; let text = ""; let color = 'white';
+                let equippedBy: any = null; // NOUVEAUTÉ : Détecter si l'objet est porté
 
-                if (currentTab === 'items') { const itemName = itemsDB[itemObj.id].name; text = itemObj.count > 1 ? `${itemName} x${itemObj.count}` : itemName; } 
-                else if (currentTab === 'weapons') { const dbItem = weaponsDB[itemObj.id]; text = `${dbItem.name} [${itemObj.grade}] +${itemObj.level}`; color = elementColors[dbItem.element]; }
-                else if (currentTab === 'armors') { const dbItem = armorsDB[itemObj.id]; text = `${dbItem.name} [${itemObj.grade}] +${itemObj.level}`; color = elementColors[dbItem.element]; }
-                else if (currentTab === 'manuscripts') { const skillDb = skillsDB[itemObj.skillId]; text = `Manuscrit : ${skillDb.name} [Lvl.${itemObj.level}]`; color = elementColors[skillDb.element]; }
+                if (currentTab === 'items') { 
+                    const itemName = itemsDB[itemObj.id].name; 
+                    text = itemObj.count > 1 ? `${itemName} x${itemObj.count}` : itemName; 
+                } 
+                else if (currentTab === 'weapons') { 
+                    const dbItem = weaponsDB[itemObj.id]; text = `${dbItem.name} [${itemObj.grade}] +${itemObj.level}`; color = elementColors[dbItem.element]; 
+                    equippedBy = party.find(p => p.equippedWeapon === itemObj); // Qui porte cette arme ?
+                }
+                else if (currentTab === 'armors') { 
+                    const dbItem = armorsDB[itemObj.id]; text = `${dbItem.name} [${itemObj.grade}] +${itemObj.level}`; color = elementColors[dbItem.element]; 
+                    equippedBy = party.find(p => p.equippedArmor === itemObj); // Qui porte cette armure ?
+                }
+                else if (currentTab === 'manuscripts') { 
+                    const skillDb = skillsDB[itemObj.skillId]; text = `Manuscrit : ${skillDb.name} [Lvl.${itemObj.level}]`; color = elementColors[skillDb.element]; 
+                }
 
                 const displayIndex = i - startIndex; const y = marginY + 115 + (displayIndex * 35);
-                if (i === selectedIndex) { ctx.fillStyle = '#f1c40f'; ctx.fillText(`▶  ${text}`, rightX + 30, y); } 
-                else { ctx.fillStyle = color; ctx.fillText(`    ${text}`, rightX + 30, y); }
+                const prefix = i === selectedIndex ? '▶  ' : '    ';
+                
+                if (i === selectedIndex) { ctx.fillStyle = '#f1c40f'; ctx.fillText(prefix + text, rightX + 30, y); } 
+                else { ctx.fillStyle = color; ctx.fillText(prefix + text, rightX + 30, y); }
+
+                // --- NOUVEAUTÉ : Dessin du badge d'équipement ---
+                if (equippedBy) {
+                    const textWidth = ctx.measureText(prefix + text).width; // S'adapte à la longueur du nom
+                    
+                    let heroColor = '#fff';
+                    if (equippedBy.heroClass === 'Général') heroColor = '#3498db';
+                    else if (equippedBy.heroClass === 'Mage') heroColor = '#9b59b6';
+                    else if (equippedBy.heroClass === 'Tank') heroColor = '#f1c40f';
+                    else if (equippedBy.heroClass === 'Berserker') heroColor = '#e74c3c';
+
+                    const badgeX = rightX + 40 + textWidth;
+                    const badgeY = y - 18;
+
+                    // Carré de couleur
+                    ctx.fillStyle = heroColor;
+                    ctx.fillRect(badgeX, badgeY, 22, 22);
+                    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
+                    ctx.strokeRect(badgeX, badgeY, 22, 22);
+                    
+                    // Initiale de la classe à l'intérieur
+                    ctx.fillStyle = 'white'; ctx.font = 'bold 14px Arial'; ctx.textAlign = 'center';
+                    ctx.fillText(equippedBy.heroClass.charAt(0), badgeX + 11, badgeY + 16);
+                    
+                    // On remet la police de base
+                    ctx.font = '20px Arial'; ctx.textAlign = 'left'; 
+                }
             }
             if (endIndex < listLength) { ctx.fillStyle = '#bdc3c7'; ctx.font = 'italic 14px Arial'; ctx.fillText("▼ Bas de la liste", rightX + 30, marginY + 115 + (MAX_VISIBLE * 35) - 15); }
         }
