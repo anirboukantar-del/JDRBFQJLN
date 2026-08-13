@@ -42,23 +42,23 @@ export const weaponsDB: Record<string, Weapon> = {
     baguette: { 
         id: 'baguette', name: 'Baguette', description: 'ATK -80%, PP Spé -65%, Pwr Spé +15%', 
         atkBoost: 0, element: 'normal', elementPercent: 0, 
-        atkMultiplier: -0.80, spCostPenalty: -0.65, spAtkBonus: 0.15, isMagic: true
+        atkMultiplier: 0.80, spCostPenalty: -0.65, spAtkBonus: 0.15, isMagic: true
     },
     baton_tung: { 
         id: 'baton_tung', name: 'Bâton Tung', description: 'Massue sauvage type Plante (30%)', 
         atkBoost: 25, element: 'plante', elementPercent: 0.30 
     },
     pinces_crabe: { 
-        id: 'pinces_crabe', name: 'Pinces de Crabe', description: '+23 ATK, 30% Eau', 
+        id: 'pinces_crabe', name: 'Pinces de Crabe', description: '30% Eau', 
         atkBoost: 23, element: 'eau', elementPercent: 0.30 
     },
     chancleta: { 
-        id: 'chancleta', name: 'Chancleta', description: '+15 ATK, 8% chance de Terreur', 
+        id: 'chancleta', name: 'Chancleta', description: '8% chance de Terreur', 
         atkBoost: 15, element: 'normal', elementPercent: 0, fearChanceBonus: 0.08 
     },
     baton_soleil: {
         id: 'baton_soleil', name: 'Bâton Soleil', description: 'ATK -50%, PP Spé -75%, Pwr Spé +25%, Bâton qui canalise la puissance du soleil',
-        atkBoost: 0, element: 'feu', elementPercent: 100,
+        atkBoost: 0, element: 'feu', elementPercent: 10,
         atkMultiplier: -0.50, spCostPenalty: -0.75, spAtkBonus: 0.25, isMagic: true
     }
 };
