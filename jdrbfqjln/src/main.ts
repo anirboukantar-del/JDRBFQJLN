@@ -416,7 +416,21 @@ function gameLoop() {
     }
 
     let targetCameraX = player.x + (player.width / 2) - (canvas.width / 2); let targetCameraY = player.y + (player.height / 2) - (canvas.height / 2);
-    if (currentGameState === 'COMBAT' && activeEnemies.length > 0) { const midEnemiesX = activeEnemies.reduce((sum, e) => sum + e.x, 0) / activeEnemies.length; const midEnemiesY = activeEnemies.reduce((sum, e) => sum + e.y, 0) / activeEnemies.length; targetCameraX = ((player.x + midEnemiesX) / 2) - (canvas.width / 2); targetCameraY = ((player.y + midEnemiesY) / 2) - (canvas.height / 2); }
+    if (currentGameState === 'COMBAT' && activeEnemies.length > 0) {
+        activeEnemies.forEach(e => { e.draw(ctx); if (!isIntroAnimating) e.drawStatsBars(ctx); });
+        
+        // --- NOUVEAUTÉ : On dessine les stats de tout le groupe
+        if (!isIntroAnimating) {
+            party.forEach(p => {
+                if(p.hp > 0) p.drawStatsBars(ctx); // Affiche la barre s'il est en vie
+            });
+        }
+        
+        if (combatSubState === 'TARGET_SELECT' && activeEnemies[currentTargetIndex]) { 
+            const target = activeEnemies[currentTargetIndex]; 
+            ctx.fillStyle = '#f1c40f'; ctx.beginPath(); ctx.moveTo(target.x - 30, target.y + target.height/2); ctx.lineTo(target.x - 10, target.y + target.height/2 - 15); ctx.lineTo(target.x - 10, target.y + target.height/2 + 15); ctx.fill(); 
+        }
+    }
     cameraX += (targetCameraX - cameraX) * 0.1; cameraY += (targetCameraY - cameraY) * 0.1;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = 'black'; ctx.fillRect(0, 0, canvas.width, canvas.height);

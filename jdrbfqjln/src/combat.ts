@@ -13,7 +13,8 @@ export let currentGameState: GameState = 'EXPLORE';
 export function setGameState(newState: GameState) { currentGameState = newState; }
 
 export let activeEnemies: any[] = []; 
-export let activePlayer: any = null; 
+export let activeParty: any[] = []; // NOUVEAUTÉ : Le groupe complet en combat
+export let activePlayer: any = null; // Pointeur vers le perso qui choisit/agit
 export let currentTargetIndex = 0; 
 let currentEnemyActionIndex = 0; 
 
@@ -31,23 +32,41 @@ export let combatSubState: CombatSubState = 'ACTION_SELECT';
 export let currentSkillIndex = 0;
 export let pendingSkill: Skill | null = null; 
 
-let queuedPlayerAction: { type: string, skill: Skill | null } | null = null;
+// NOUVEAUTÉS : Gestion de la file d'attente des actions
+export let currentPlayerSelectIndex = 0; 
+export let queuedPartyActions: { player: any, type: string, skill: Skill | null, targetIndex: number }[] = [];
+let currentExecutingPlayerIndex = 0;
+
 let executionStep = 0; let executionTimer = 0;
 
 let preCombatPlayerX = 0; let preCombatPlayerY = 0;
 let preCombatEnemies: { enemy: any, x: number, y: number }[] = [];
-export const gameOverMessages = ["Tu as glissé sur un pixel mal codé.", "Le groupe t'a eu.", "Appuie sur F5, c'est mieux."];
+export const gameOverMessages = ["Tu as glissé sur un pixel mal codé.", "Le groupe a été décimé.", "Le Tank n'a pas fait son job."];
 export let currentGameOverMessage = "";
 
-function positionEntitiesForCombat(player: any, enemies: any[]) {
-    const midX = player.x + 100; const midY = player.y + (player.height / 2); player.x = midX - 150;
-    const padding = 55; const totalEnemiesHeight = enemies.reduce((sum, e) => sum + e.height, 0);
-    const totalGroupHeight = totalEnemiesHeight + ((enemies.length - 1) * padding);
-    let currentY = midY - (totalGroupHeight / 2);
-    enemies.forEach((e) => { e.x = midX + 100; e.y = currentY; currentY += e.height + padding; });
+function positionEntitiesForCombat(party: any[], enemies: any[]) {
+    const cx = window.innerWidth / 2;
+    const cy = window.innerHeight / 2;
+    
+    // Le Groupe à gauche
+    const pStartX = cx - 250;
+    const pStartY = cy - ((party.length * 60) / 2);
+    party.forEach((p, idx) => {
+        p.x = pStartX - (idx % 2 === 0 ? 0 : 40); // Zigzag
+        p.y = pStartY + (idx * 60);
+    });
+
+    // Ennemis à droite
+    const eStartX = cx + 150;
+    const eStartY = cy - ((enemies.length * 70) / 2);
+    enemies.forEach((e, idx) => {
+        e.x = eStartX + (idx % 2 === 0 ? 0 : 40); // Zigzag
+        e.y = eStartY + (idx * 70);
+    });
 }
 
 function applyTurnEndModifiersWithMessages(entity: any) {
+    if (entity.hp <= 0) return; // Ne pas appliquer aux morts
     entity.activeModifiers.forEach((modId: string) => {
         const modifier = modifiersDB[modId];
         if (modifier && modifier.onTurnEnd) {
@@ -56,19 +75,29 @@ function applyTurnEndModifiersWithMessages(entity: any) {
         }
     }); 
     
-    // --- NOUVEAUTÉ : Dissipation naturelle des nouveaux statuts ---
-    const decayChance = 0.33; // 33% de chance de se dissiper par tour
+    const decayChance = 0.33; 
     if (entity.activeModifiers.includes('cloned') && Math.random() < decayChance) { entity.activeModifiers.splice(entity.activeModifiers.indexOf('cloned'), 1); entity.addFloatingText("Clones dissipés", "#bdc3c7"); }
     if (entity.activeModifiers.includes('ragebait') && Math.random() < decayChance) { entity.activeModifiers.splice(entity.activeModifiers.indexOf('ragebait'), 1); entity.addFloatingText("Calmé", "#bdc3c7"); }
     if (entity.activeModifiers.includes('brainrot') && Math.random() < decayChance) { entity.activeModifiers.splice(entity.activeModifiers.indexOf('brainrot'), 1); entity.addFloatingText("Lucide", "#bdc3c7"); }
 }
 
 function checkDeath() {
-    if (activePlayer && activePlayer.hp <= 0) { currentGameState = 'GAME_OVER'; currentGameOverMessage = gameOverMessages[Math.floor(Math.random() * gameOverMessages.length)]; return true; }
+    // Si TOUS les héros sont morts
+    const allDead = activeParty.every(p => p.hp <= 0);
+    if (allDead) { currentGameState = 'GAME_OVER'; currentGameOverMessage = gameOverMessages[Math.floor(Math.random() * gameOverMessages.length)]; return true; }
+    
+    // Gérer la mort des ennemis
     for (let i = activeEnemies.length - 1; i >= 0; i--) {
         if (activeEnemies[i].hp <= 0) {
-            const deadEnemy = activeEnemies[i]; const xpGained = Math.max(1, Math.floor((deadEnemy.maxHp * deadEnemy.level) / 4));
-            activePlayer.addFloatingText(`+${xpGained} XP`, '#f1c40f', true); activePlayer.gainXp(xpGained);
+            const deadEnemy = activeEnemies[i]; 
+            const xpGained = Math.max(1, Math.floor((deadEnemy.maxHp * deadEnemy.level) / 4));
+            
+            // Tout le monde gagne de l'XP !
+            activeParty.filter(p => p.hp > 0).forEach(p => {
+                p.addFloatingText(`+${xpGained} XP`, '#f1c40f', true); 
+                p.gainXp(xpGained);
+            });
+            
             activeEnemies.splice(i, 1);
             if (currentTargetIndex >= activeEnemies.length) currentTargetIndex = Math.max(0, activeEnemies.length - 1);
         }
@@ -77,6 +106,7 @@ function checkDeath() {
     return false;
 }
 
+// ... (Garde la fonction calculateDamage intacte comme avant) ...
 function calculateDamage(attacker: any, defender: any, skill: Skill | null, isDefenderGuarding: boolean) {
     let effectMsg = ""; let splits: { damage: number, element: string }[] = [];
     const armorItem = defender.equippedArmor as EquipmentItem | null; const armor = armorItem ? armorsDB[armorItem.id] : null;
@@ -103,8 +133,6 @@ function calculateDamage(attacker: any, defender: any, skill: Skill | null, isDe
 
         let rawDmg = ((totalAtk * Math.max(0.1, skill.pwr)) / totalDef) * coefficient * baseDamageScale; 
         if (isDefenderGuarding || hasUltraGarde) rawDmg *= hasUltraGarde ? 0.5 : 0.8; 
-        
-        // --- NOUVEAUTÉ : Attaque Clone (Dégâts x2) ---
         if (attacker.activeModifiers.includes('cloned')) { rawDmg *= 2; effectMsg = effectMsg ? effectMsg + " (x2 Clone)" : "x2 Clone!"; }
         
         rawDmg *= variance();
@@ -112,7 +140,6 @@ function calculateDamage(attacker: any, defender: any, skill: Skill | null, isDe
     } else {
         if (weapon && weapon.element !== 'normal') {
             const percentElem = weapon.elementPercent; const percentNormal = 1.0 - percentElem;
-            
             const effNormal = (armor && armor.forceResist) ? 0.7 : getEffectiveness('normal', defElement);
             let dmgNormal = ((totalAtk * 1.0) / totalDef) * effNormal * percentNormal * baseDamageScale; 
             if (isDefenderGuarding || hasUltraGarde) dmgNormal *= hasUltraGarde ? 0.5 : 0.8; dmgNormal *= variance();
@@ -122,18 +149,15 @@ function calculateDamage(attacker: any, defender: any, skill: Skill | null, isDe
             if (isDefenderGuarding || hasUltraGarde) dmgElem *= hasUltraGarde ? 0.5 : 0.8; dmgElem *= variance();
             
             if (attacker.activeModifiers.includes('cloned')) { dmgNormal *= 2; dmgElem *= 2; effectMsg = effectMsg ? effectMsg + " (x2 Clone)" : "x2 Clone!"; }
-            
             splits.push({ damage: Math.max(1, Math.floor(dmgNormal)), element: 'normal' }); splits.push({ damage: Math.max(1, Math.floor(dmgElem)), element: weapon.element });
             if (effElem > 1) effectMsg = "Efficace !"; else if (effElem < 1) effectMsg = "Pas efficace...";
         } else {
             const atkElem = weapon ? weapon.element : attacker.atkElement;
             const effectiveness = (armor && armor.forceResist) ? 0.7 : getEffectiveness(atkElem as ElementType, defElement);
-            
             let totalRawDmg = ((totalAtk * 1.0) / totalDef) * effectiveness * baseDamageScale; 
             if (isDefenderGuarding || hasUltraGarde) totalRawDmg *= hasUltraGarde ? 0.5 : 0.8; totalRawDmg *= variance();
             
             if (attacker.activeModifiers.includes('cloned')) { totalRawDmg *= 2; effectMsg = effectMsg ? effectMsg + " (x2 Clone)" : "x2 Clone!"; }
-
             splits.push({ damage: Math.max(1, Math.floor(totalRawDmg)), element: atkElem });
             if (effectiveness > 1) effectMsg = "Efficace !"; else if (effectiveness < 1) effectMsg = "Pas efficace...";
         }
@@ -147,7 +171,6 @@ function applyElementalEffects(attacker: any, defender: any, damage: number, ski
     const defenderArmorItem = defender.equippedArmor as EquipmentItem | null; const defenderArmor = defenderArmorItem ? armorsDB[defenderArmorItem.id] : null;
     const element = skill ? skill.element : (weapon ? weapon.element : 'normal');
 
-    // --- NOUVEAUTÉ : Compétences Spéciales ---
     if (skill && skill.id === 'ragebait') { if (!defender.activeModifiers.includes('ragebait')) defender.activeModifiers.push('ragebait'); return " 🤬 Enragé !"; }
     if (skill && skill.id === 'brainrot') { if (!defender.activeModifiers.includes('brainrot')) defender.activeModifiers.push('brainrot'); return " 🧟 Cerveau pourri !"; }
     if (skill && skill.id === 'attendrissement') { if (!defender.activeModifiers.includes('tenderized')) defender.activeModifiers.push('tenderized'); return " 🥩 Attendri !"; }
@@ -160,7 +183,6 @@ function applyElementalEffects(attacker: any, defender: any, damage: number, ski
     else if (weaponItem && weapon) { chance = Math.min(1.0, (0.1 + (getWeaponBoost(weaponItem) * 0.015)) * weapon.elementPercent + (attacker.level * 0.01)); }
     if (weapon && weapon.poisonChanceBonus) chance += weapon.poisonChanceBonus; 
 
-    // --- NOUVEAUTÉ : Calcul Globale de la Peur ---
     let fearChance = 0;
     if (skill && skill.id === 'cri') fearChance = 0.35 + (skill.level * 0.02);
     if (skill && skill.id === 'frappe_terreur') fearChance = 0.50 + (skill.level * 0.02);
@@ -183,119 +205,158 @@ function applyElementalEffects(attacker: any, defender: any, damage: number, ski
     return "";
 }
 
+function advanceToNextAlivePlayerForSelection() {
+    while (currentPlayerSelectIndex < activeParty.length && activeParty[currentPlayerSelectIndex].hp <= 0) {
+        currentPlayerSelectIndex++;
+    }
+    if (currentPlayerSelectIndex >= activeParty.length) {
+        CombatSystem.startExecutionPhase();
+    } else {
+        activePlayer = activeParty[currentPlayerSelectIndex];
+        combatSubState = 'ACTION_SELECT';
+        currentMenuIndex = 0;
+        currentSkillIndex = 0;
+        pendingSkill = null;
+    }
+}
+
 export const CombatSystem = {
-    // --- NOUVEAUTÉ : Le combat prend le groupe complet ---
     start(party: any[], encounteredEnemies: any[]) {
         currentGameState = 'COMBAT'; 
-        // Le joueur actif au début est le premier du groupe (le Général)
-        activePlayer = party[0]; 
+        activeParty = [...party]; 
         activeEnemies = [...encounteredEnemies];
         
-        // On sauvegarde la position pré-combat du premier joueur (pour la fuite)
-        preCombatPlayerX = party[0].x; 
-        preCombatPlayerY = party[0].y; 
+        preCombatPlayerX = activeParty[0].x; preCombatPlayerY = activeParty[0].y; 
         preCombatEnemies = activeEnemies.map(e => ({ enemy: e, x: e.x, y: e.y }));
         
-        party[0].vx = 0; party[0].vy = 0; 
-        currentMenuIndex = 0; currentSkillIndex = 0; pendingSkill = null; currentTargetIndex = 0;
-        combatSubState = 'ACTION_SELECT'; 
-        
-        // On réinitialise les états de tous les héros
-        party.forEach(hero => {
-            hero.isDefending = false; 
-            hero.isActing = false;
-        });
+        activeParty.forEach(hero => { hero.vx = 0; hero.vy = 0; hero.isDefending = false; hero.isActing = false; });
         activeEnemies.forEach(e => { e.isDefending = false; e.isActing = false; });
 
-        positionEntitiesForCombat(party[0], activeEnemies); // Pour l'instant, on positionne que le général, on verra le placement des 4 héros plus tard
+        queuedPartyActions = [];
+        currentPlayerSelectIndex = 0;
+        advanceToNextAlivePlayerForSelection(); // Trouve le 1er héros en vie
+
+        positionEntitiesForCombat(activeParty, activeEnemies); 
         isIntroAnimating = true; introAnimationTimer = 0;
     },
+    
     update() {
         if (isIntroAnimating) { introAnimationTimer++; if (introAnimationTimer >= INTRO_ANIMATION_DURATION) { isIntroAnimating = false; introAnimationTimer = 0; } }
         if (gracePeriodTimer > 0) gracePeriodTimer--;
         if (combatSubState === 'EXECUTION_PHASE') { if (executionTimer > 0) { executionTimer--; if (executionTimer === 0) this.executeNextStep(); } }
     },
-    startExecutionPhase() { combatSubState = 'EXECUTION_PHASE'; executionStep = 0; executionTimer = 10; currentEnemyActionIndex = 0; },
+    
+    startExecutionPhase() { 
+        combatSubState = 'EXECUTION_PHASE'; 
+        executionStep = 0; executionTimer = 10; 
+        currentExecutingPlayerIndex = 0;
+        currentEnemyActionIndex = 0; 
+    },
 
     executeNextStep() {
         if (checkDeath()) return;
 
+        // PHASE 1 : Les Héros attaquent
         if (executionStep === 0) {
-            activePlayer.isDefending = false; 
-            activePlayer.isActing = true;
-
-            const fearIdx = activePlayer.activeModifiers.indexOf('feared');
-            if (fearIdx !== -1) {
-                activePlayer.activeModifiers.splice(fearIdx, 1);
-                activePlayer.currentActionName = { text: "Terrorisé !", color: "#bdc3c7", timer: 80 };
-                executionStep = 1; executionTimer = 80; return;
+            if (currentExecutingPlayerIndex > 0) {
+                // Fin de l'animation du joueur précédent
+                activeParty.forEach(p => p.isActing = false);
             }
 
-            if (queuedPlayerAction!.type === 'FLEE') { this.end(true); return; } 
-            else if (queuedPlayerAction!.type === 'DEFEND') {
-                activePlayer.isDefending = true; 
-                activePlayer.currentActionName = { text: "Garde", color: "white", timer: 80 };
-                const burnIndex = activePlayer.activeModifiers.indexOf('burning'); if (burnIndex !== -1) activePlayer.activeModifiers.splice(burnIndex, 1); 
-                const muddyIndex = activePlayer.activeModifiers.indexOf('muddy'); if (muddyIndex !== -1) activePlayer.activeModifiers.splice(muddyIndex, 1); 
-                // --- NOUVEAUTÉ : La Garde soigne l'attendrissement ---
-                const tenderIdx = activePlayer.activeModifiers.indexOf('tenderized'); if (tenderIdx !== -1) activePlayer.activeModifiers.splice(tenderIdx, 1); 
+            if (currentExecutingPlayerIndex < queuedPartyActions.length) {
+                const action = queuedPartyActions[currentExecutingPlayerIndex];
+                activePlayer = action.player;
+                
+                // Si le joueur est mort avant son tour
+                if (activePlayer.hp <= 0) {
+                    currentExecutingPlayerIndex++; executionTimer = 1; return;
+                }
+
+                activePlayer.isDefending = false; 
+                activePlayer.isActing = true;
+
+                const fearIdx = activePlayer.activeModifiers.indexOf('feared');
+                if (fearIdx !== -1) {
+                    activePlayer.activeModifiers.splice(fearIdx, 1);
+                    activePlayer.currentActionName = { text: "Terrorisé !", color: "#bdc3c7", timer: 80 };
+                }
+                else if (action.type === 'FLEE') { 
+                    this.end(true); return; 
+                } 
+                else if (action.type === 'DEFEND') {
+                    activePlayer.isDefending = true; 
+                    activePlayer.currentActionName = { text: "Garde", color: "white", timer: 80 };
+                    const burnIndex = activePlayer.activeModifiers.indexOf('burning'); if (burnIndex !== -1) activePlayer.activeModifiers.splice(burnIndex, 1); 
+                    const muddyIndex = activePlayer.activeModifiers.indexOf('muddy'); if (muddyIndex !== -1) activePlayer.activeModifiers.splice(muddyIndex, 1); 
+                    const tenderIdx = activePlayer.activeModifiers.indexOf('tenderized'); if (tenderIdx !== -1) activePlayer.activeModifiers.splice(tenderIdx, 1); 
+                } 
+                else {
+                    let PWR = action.skill ? action.skill.pwr : 1;
+                    let actionName = action.skill ? action.skill.name : "Attaque";
+                    const skill = action.skill;
+                    const weaponItem = activePlayer.equippedWeapon as EquipmentItem | null; const weapon = weaponItem ? weaponsDB[weaponItem.id] : null;
+
+                    const actionColor = elementColors[skill ? skill.element : (weapon ? weapon.element : activePlayer.atkElement)] || 'white';
+                    activePlayer.currentActionName = { text: actionName, color: actionColor, timer: 80 };
+
+                    // Vérifier si la cible est toujours en vie, sinon cibler le prochain
+                    let targetEnemies = [];
+                    if (skill && (skill.targetType === 'all_enemies')) {
+                        targetEnemies = activeEnemies.filter(e => e.hp > 0);
+                    } else if (skill && (skill.targetType === 'all_allies' || skill.targetType === 'self')) {
+                        targetEnemies = skill.targetType === 'self' ? [activePlayer] : activeParty.filter(p => p.hp > 0);
+                    } else {
+                        let tIndex = action.targetIndex;
+                        if (activeEnemies[tIndex] && activeEnemies[tIndex].hp <= 0) {
+                            tIndex = activeEnemies.findIndex(e => e.hp > 0);
+                        }
+                        if (tIndex !== -1) targetEnemies.push(activeEnemies[tIndex]);
+                    }
+
+                    if (skill) activePlayer.pp -= Math.floor(skill.ppCost * calculatePpMult(activePlayer));
+
+                    if (skill && skill.id === 'meditation') {
+                        const heal = Math.floor(activePlayer.totalMaxPp * (0.20 + skill.level * 0.01));
+                        activePlayer.pp = Math.min(activePlayer.totalMaxPp, activePlayer.pp + heal);
+                        activePlayer.addFloatingText(`+${heal} PP`, '#9b59b6');
+                    }
+                    else if (PWR < 0) { 
+                        targetEnemies.forEach(t => {
+                            let heal = Math.floor(activePlayer.totalAtk * Math.abs(PWR));
+                            if (weapon && weapon.healBonus) heal = Math.floor(heal * (1 + weapon.healBonus)); 
+                            t.hp = Math.min(t.maxHp, t.hp + heal); t.addFloatingText(`+${heal}`, '#2ecc71');
+                        });
+                    } 
+                    else if (PWR === 0) { 
+                        targetEnemies.forEach(t => {
+                            if (skill) skill.modifiers.forEach((modId: string) => { if (!t.activeModifiers.includes(modId)) t.activeModifiers.push(modId); });
+                            if (skill && skill.id === 'cri' && Math.random() < 0.35 + (skill.level * 0.02)) {
+                                if (!t.activeModifiers.includes('feared')) t.activeModifiers.push('feared'); t.addFloatingText("Terrorisé!", "#bdc3c7");
+                            }
+                        });
+                    } 
+                    else { 
+                        targetEnemies.forEach(t => {
+                            const result = calculateDamage(activePlayer, t, skill, t.isDefending);
+                            if (PWR > 0 || result.totalDamage > 1) {
+                                t.takeDamage(result.totalDamage); result.splits.forEach((split: any) => t.addFloatingText(split.damage.toString(), elementColors[split.element]));
+                                if (result.effectMsg) t.addFloatingText(result.effectMsg, '#f1c40f', true);
+                            }
+                            const effectTxt = applyElementalEffects(activePlayer, t, result.totalDamage, skill);
+                            if (effectTxt) t.addFloatingText(effectTxt, '#f1c40f', true);
+                        });
+                    }
+                }
+                currentExecutingPlayerIndex++; executionTimer = 80; 
             } else {
-                let PWR = queuedPlayerAction!.skill ? queuedPlayerAction!.skill.pwr : 1;
-                let actionName = queuedPlayerAction!.skill ? queuedPlayerAction!.skill.name : "Attaque";
-                const skill = queuedPlayerAction!.skill;
-                const weaponItem = activePlayer.equippedWeapon as EquipmentItem | null; const weapon = weaponItem ? weaponsDB[weaponItem.id] : null;
-
-                const actionColor = elementColors[skill ? skill.element : (weapon ? weapon.element : activePlayer.atkElement)] || 'white';
-                activePlayer.currentActionName = { text: actionName, color: actionColor, timer: 80 };
-
-                let targets = [activeEnemies[currentTargetIndex]];
-                if (skill) {
-                    if (skill.targetType === 'all_enemies') targets = [...activeEnemies];
-                    else if (skill.targetType === 'all_allies' || skill.targetType === 'self') targets = [activePlayer];
-                }
-
-                if (skill) activePlayer.pp -= Math.floor(skill.ppCost * calculatePpMult(activePlayer));
-
-                // --- NOUVEAUTÉ : Méditation (PWR=0, mais heal 20%) ---
-                if (skill && skill.id === 'meditation') {
-                    const heal = Math.floor(activePlayer.totalMaxPp * (0.20 + skill.level * 0.01));
-                    activePlayer.pp = Math.min(activePlayer.totalMaxPp, activePlayer.pp + heal);
-                    activePlayer.addFloatingText(`+${heal} PP`, '#9b59b6');
-                }
-                else if (PWR < 0) { 
-                    targets.forEach(t => {
-                        let heal = Math.floor(activePlayer.totalAtk * Math.abs(PWR));
-                        if (weapon && weapon.healBonus) heal = Math.floor(heal * (1 + weapon.healBonus)); 
-                        t.hp = Math.min(t.maxHp, t.hp + heal); t.addFloatingText(`+${heal}`, '#2ecc71');
-                    });
-                } 
-                else if (PWR === 0) { 
-                    targets.forEach(t => {
-                        if (skill) skill.modifiers.forEach((modId: string) => { if (!t.activeModifiers.includes(modId)) t.activeModifiers.push(modId); });
-                        if (skill && skill.id === 'cri' && Math.random() < 0.35 + (skill.level * 0.02)) {
-                            if (!t.activeModifiers.includes('feared')) t.activeModifiers.push('feared'); t.addFloatingText("Terrorisé!", "#bdc3c7");
-                        }
-                    });
-                } 
-                else { 
-                    targets.forEach(t => {
-                        const result = calculateDamage(activePlayer, t, skill, t.isDefending);
-                        // Ne fait pas 1 dégât forcé si la puissance est à 0 (Ragebait/Brainrot) 
-                        if (PWR > 0 || result.totalDamage > 1) {
-                            t.takeDamage(result.totalDamage); result.splits.forEach((split: any) => t.addFloatingText(split.damage.toString(), elementColors[split.element]));
-                            if (result.effectMsg) t.addFloatingText(result.effectMsg, '#f1c40f', true);
-                        }
-                        const effectTxt = applyElementalEffects(activePlayer, t, result.totalDamage, skill);
-                        if (effectTxt) t.addFloatingText(effectTxt, '#f1c40f', true);
-                    });
-                }
+                // Fin du tour des héros, au tour des ennemis
+                activeParty.forEach(p => p.isActing = false);
+                executionStep = 1; executionTimer = 10;
             }
-            executionStep = 1; executionTimer = 80; 
         }
+        // PHASE 2 : Les Ennemis attaquent
         else if (executionStep === 1) {
             if (checkDeath()) return; 
-            activePlayer.isActing = false; 
-
             if (currentEnemyActionIndex > 0) activeEnemies[currentEnemyActionIndex - 1].isActing = false; 
 
             if (currentEnemyActionIndex < activeEnemies.length) {
@@ -310,11 +371,8 @@ export const CombatSystem = {
                     currentEnemyActionIndex++; executionTimer = 100; return;
                 }
 
-                const weaponItem = currentEnemy.equippedWeapon as EquipmentItem | null; const weapon = weaponItem ? weaponsDB[weaponItem.id] : null;
-
                 let action = EnemyAI.decideAction(currentEnemy, calculatePpMult(currentEnemy));
                 
-                // --- NOUVEAUTÉ : L'IA subit le Brainrot et le Ragebait ---
                 if (currentEnemy.activeModifiers.includes('brainrot') && action.type === 'SKILL') action = { type: 'ATTACK', skill: null };
                 if (currentEnemy.activeModifiers.includes('ragebait') && action.type === 'DEFEND') action = { type: 'ATTACK', skill: null };
 
@@ -328,19 +386,25 @@ export const CombatSystem = {
                 else {
                     const enemySkill = action.skill || null;
                     let PWR = enemySkill ? enemySkill.pwr : 1;
-                    let actionName = enemySkill ? enemySkill.name : "Attaque";
+                    const weaponItem = currentEnemy.equippedWeapon as EquipmentItem | null; const weapon = weaponItem ? weaponsDB[weaponItem.id] : null;
                     const actionColor = elementColors[enemySkill ? enemySkill.element : (weapon ? weapon.element : currentEnemy.atkElement)] || 'white';
-                    currentEnemy.currentActionName = { text: actionName, color: actionColor, timer: 100 };
+                    currentEnemy.currentActionName = { text: enemySkill ? enemySkill.name : "Attaque", color: actionColor, timer: 100 };
 
-                    let targets = [activePlayer]; 
+                    // Les ennemis ciblent un héros VIVANT au hasard
+                    const aliveHeros = activeParty.filter(p => p.hp > 0);
+                    if (aliveHeros.length === 0) return; // GAME OVER handled elsewhere
+                    const randomTarget = aliveHeros[Math.floor(Math.random() * aliveHeros.length)];
+
+                    let targets = [randomTarget]; 
                     if (enemySkill) {
                         if (enemySkill.targetType === 'all_allies') targets = [...activeEnemies];
                         else if (enemySkill.targetType === 'self') targets = [currentEnemy];
+                        // 'all_enemies' pour un ennemi = cible tout le groupe joueur
+                        else if (enemySkill.targetType === 'all_enemies') targets = [...aliveHeros];
                     }
 
                     if (enemySkill) currentEnemy.pp -= Math.floor(enemySkill.ppCost * calculatePpMult(currentEnemy));
 
-                    // --- NOUVEAUTÉ : Méditation IA ---
                     if (enemySkill && enemySkill.id === 'meditation') {
                         const heal = Math.floor(currentEnemy.totalMaxPp * (0.20 + enemySkill.level * 0.01));
                         currentEnemy.pp = Math.min(currentEnemy.totalMaxPp, currentEnemy.pp + heal);
@@ -386,36 +450,53 @@ export const CombatSystem = {
             if (checkDeath()) return; 
             if (activeEnemies.length > 0) activeEnemies[activeEnemies.length - 1].isActing = false; 
 
-            applyTurnEndModifiersWithMessages(activePlayer);
+            activeParty.forEach((p) => applyTurnEndModifiersWithMessages(p));
             activeEnemies.forEach((e) => applyTurnEndModifiersWithMessages(e));
             executionStep = 3; executionTimer = 30; 
         }
         else if (executionStep === 3) {
             if (checkDeath()) return; 
-            combatSubState = 'ACTION_SELECT'; currentMenuIndex = 0; 
+            // Fin du tour, on recommence la file d'attente
+            queuedPartyActions = [];
+            currentPlayerSelectIndex = 0;
+            advanceToNextAlivePlayerForSelection();
         }
     },
 
     handleInput(key: string) {
         if (isIntroAnimating || combatSubState === 'EXECUTION_PHASE' || currentGameState === 'GAME_OVER') return; 
 
-        // --- NOUVEAUTÉ : Blocage des Menus ---
         const hasBrainrot = activePlayer.activeModifiers.includes('brainrot');
         const hasRagebait = activePlayer.activeModifiers.includes('ragebait');
         
         if (combatSubState === 'ACTION_SELECT') {
+            // NOUVEAUTÉ : Annuler le choix précédent (Style Deltarune !)
+            if ((key === 'Escape' || key === 'Backspace') && currentPlayerSelectIndex > 0) {
+                do {
+                    currentPlayerSelectIndex--;
+                } while (currentPlayerSelectIndex > 0 && activeParty[currentPlayerSelectIndex].hp <= 0);
+                
+                queuedPartyActions.pop(); // Retire l'action du perso d'avant
+                activePlayer = activeParty[currentPlayerSelectIndex];
+                return;
+            }
+
             if (key === 'ArrowUp' || key === 'z' || key === 'Z') { currentMenuIndex--; if (currentMenuIndex < 0) currentMenuIndex = combatMenuOptions.length - 1; } 
             else if (key === 'ArrowDown' || key === 's' || key === 'S') { currentMenuIndex++; if (currentMenuIndex >= combatMenuOptions.length) currentMenuIndex = 0; } 
             else if (key === 'Enter' || key === ' ') {
-                
-                // On bloque l'entrée si sous statut !
                 if (currentMenuIndex === 1 && hasBrainrot) return; 
                 if (currentMenuIndex === 2 && hasRagebait) return;
 
                 if (currentMenuIndex === 0) { pendingSkill = null; combatSubState = 'TARGET_SELECT'; currentTargetIndex = 0; } 
                 else if (currentMenuIndex === 1) { currentSkillIndex = 0; combatSubState = 'SKILL_SELECT'; }
-                else if (currentMenuIndex === 2) { queuedPlayerAction = { type: 'DEFEND', skill: null }; this.startExecutionPhase(); }
-                else if (currentMenuIndex === 3) { queuedPlayerAction = { type: 'FLEE', skill: null }; this.startExecutionPhase(); }
+                else if (currentMenuIndex === 2) { 
+                    queuedPartyActions.push({ player: activePlayer, type: 'DEFEND', skill: null, targetIndex: 0 });
+                    currentPlayerSelectIndex++; advanceToNextAlivePlayerForSelection();
+                }
+                else if (currentMenuIndex === 3) { 
+                    queuedPartyActions.push({ player: activePlayer, type: 'FLEE', skill: null, targetIndex: 0 });
+                    currentPlayerSelectIndex++; advanceToNextAlivePlayerForSelection();
+                }
             }
         } 
         else if (combatSubState === 'SKILL_SELECT') {
@@ -431,8 +512,8 @@ export const CombatSystem = {
                     if (activePlayer.pp >= actualCost) {
                         pendingSkill = dSkill; 
                         if (dSkill.targetType !== 'single') {
-                            queuedPlayerAction = { type: 'SKILL', skill: pendingSkill }; 
-                            this.startExecutionPhase();
+                            queuedPartyActions.push({ player: activePlayer, type: 'SKILL', skill: pendingSkill, targetIndex: 0 });
+                            currentPlayerSelectIndex++; advanceToNextAlivePlayerForSelection();
                         } else {
                             combatSubState = 'TARGET_SELECT'; currentTargetIndex = 0;
                         }
@@ -444,7 +525,8 @@ export const CombatSystem = {
             if (key === 'ArrowUp' || key === 'z' || key === 'Z') { currentTargetIndex--; if (currentTargetIndex < 0) currentTargetIndex = activeEnemies.length - 1; } 
             else if (key === 'ArrowDown' || key === 's' || key === 'S') { currentTargetIndex++; if (currentTargetIndex >= activeEnemies.length) currentTargetIndex = 0; } 
             else if (key === 'Enter' || key === ' ') {
-                queuedPlayerAction = { type: pendingSkill ? 'SKILL' : 'ATTACK', skill: pendingSkill }; this.startExecutionPhase();
+                queuedPartyActions.push({ player: activePlayer, type: pendingSkill ? 'SKILL' : 'ATTACK', skill: pendingSkill, targetIndex: currentTargetIndex });
+                currentPlayerSelectIndex++; advanceToNextAlivePlayerForSelection();
             } else if (key === 'Escape' || key === 'Backspace') {
                 if (pendingSkill) combatSubState = 'SKILL_SELECT'; else combatSubState = 'ACTION_SELECT'; pendingSkill = null;
             }
@@ -452,7 +534,8 @@ export const CombatSystem = {
     },
 
     end(isFleeing: boolean = false) {
-        if (activePlayer) { activePlayer.x = preCombatPlayerX; activePlayer.y = preCombatPlayerY; activePlayer.isDefending = false; activePlayer.isActing = false;}
+        // Retour à la formation "Exploration"
+        activeParty.forEach(p => { p.isDefending = false; p.isActing = false; });
         preCombatEnemies.forEach(pe => { if (activeEnemies.includes(pe.enemy)) { pe.enemy.x = pe.x; pe.enemy.y = pe.y; pe.enemy.isDefending = false; pe.enemy.isActing = false; } });
         currentGameState = 'EXPLORE'; activeEnemies = []; activePlayer = null;
         if (isFleeing) gracePeriodTimer = 120;

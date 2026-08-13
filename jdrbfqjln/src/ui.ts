@@ -263,7 +263,10 @@ export const UIManager = {
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.strokeRect(menuX, menuY, menuWidth, menuHeight);
         ctx.font = '22px Arial';
         
-        // --- NOUVEAUTÉ : Menus grisés sous effet de statut ---
+        // --- NOUVEAUTÉ : Affichage du nom du Héros en haut du menu
+        ctx.fillStyle = '#f1c40f'; 
+        ctx.fillText(`Ordres pour : ${activePlayer.name}`, menuX + 30, menuY - 10);
+
         const hasBrainrot = activePlayer.activeModifiers.includes('brainrot');
         const hasRagebait = activePlayer.activeModifiers.includes('ragebait');
 
