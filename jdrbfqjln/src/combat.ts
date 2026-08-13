@@ -184,16 +184,31 @@ function applyElementalEffects(attacker: any, defender: any, damage: number, ski
 }
 
 export const CombatSystem = {
-    start(player: any, encounteredEnemies: any[]) {
-        currentGameState = 'COMBAT'; activePlayer = player; activeEnemies = [...encounteredEnemies];
-        preCombatPlayerX = player.x; preCombatPlayerY = player.y; preCombatEnemies = activeEnemies.map(e => ({ enemy: e, x: e.x, y: e.y }));
-        player.vx = 0; player.vy = 0; currentMenuIndex = 0; currentSkillIndex = 0; pendingSkill = null; currentTargetIndex = 0;
+    // --- NOUVEAUTÉ : Le combat prend le groupe complet ---
+    start(party: any[], encounteredEnemies: any[]) {
+        currentGameState = 'COMBAT'; 
+        // Le joueur actif au début est le premier du groupe (le Général)
+        activePlayer = party[0]; 
+        activeEnemies = [...encounteredEnemies];
+        
+        // On sauvegarde la position pré-combat du premier joueur (pour la fuite)
+        preCombatPlayerX = party[0].x; 
+        preCombatPlayerY = party[0].y; 
+        preCombatEnemies = activeEnemies.map(e => ({ enemy: e, x: e.x, y: e.y }));
+        
+        party[0].vx = 0; party[0].vy = 0; 
+        currentMenuIndex = 0; currentSkillIndex = 0; pendingSkill = null; currentTargetIndex = 0;
         combatSubState = 'ACTION_SELECT'; 
         
-        activePlayer.isDefending = false; activePlayer.isActing = false;
+        // On réinitialise les états de tous les héros
+        party.forEach(hero => {
+            hero.isDefending = false; 
+            hero.isActing = false;
+        });
         activeEnemies.forEach(e => { e.isDefending = false; e.isActing = false; });
 
-        positionEntitiesForCombat(player, activeEnemies); isIntroAnimating = true; introAnimationTimer = 0;
+        positionEntitiesForCombat(party[0], activeEnemies); // Pour l'instant, on positionne que le général, on verra le placement des 4 héros plus tard
+        isIntroAnimating = true; introAnimationTimer = 0;
     },
     update() {
         if (isIntroAnimating) { introAnimationTimer++; if (introAnimationTimer >= INTRO_ANIMATION_DURATION) { isIntroAnimating = false; introAnimationTimer = 0; } }

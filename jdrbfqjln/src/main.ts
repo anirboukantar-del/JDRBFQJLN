@@ -198,23 +198,95 @@ export class Entity {
     }
 }
 
+// --- NOUVEAUTÉ : Définition des classes de Héros ---
+export type HeroClass = 'Général' | 'Mage' | 'Tank' | 'Berserker';
+
+// NOUVEAUTÉ : Historique pour le déplacement en file indienne
+const positionHistory: {x: number, y: number}[] = [];
+const HISTORY_DELAY = 12; // Nombre de frames d'écart entre chaque personnage
+
 export class Player extends Entity {
     vx: number = 0; vy: number = 0; acceleration: number = 1.0; friction: number = 0.82;    
-    constructor(startX: number, startY: number) { super(startX, startY, 40, 40, 'M', 1, 100, 50, 15, 5, [], 'normal', 'normal'); this.name = "Joueur"; }
+    heroClass: HeroClass;
+
+    constructor(startX: number, startY: number, heroClass: HeroClass = 'Général') {
+        let hp = 100, pp = 50, atk = 15, def = 5;
+        if (heroClass === 'Mage') { hp = 70; pp = 120; atk = 10; def = 2; }
+        else if (heroClass === 'Tank') { hp = 150; pp = 30; atk = 8; def = 15; }
+        else if (heroClass === 'Berserker') { hp = 90; pp = 20; atk = 25; def = 3; }
+
+        super(startX, startY, 40, 40, 'M', 1, hp, pp, atk, def, [], 'normal', 'normal'); 
+        this.name = heroClass; 
+        this.heroClass = heroClass;
+    }
+
     update() {
         if (currentGameState !== 'EXPLORE') return;
-        if (keys['ArrowUp'] || keys['z'] || keys['Z']) this.vy -= this.acceleration; if (keys['ArrowDown'] || keys['s'] || keys['S']) this.vy += this.acceleration; if (keys['ArrowLeft'] || keys['q'] || keys['Q']) this.vx -= this.acceleration; if (keys['ArrowRight'] || keys['d'] || keys['D']) this.vx += this.acceleration;
-        this.vx *= this.friction; this.vy *= this.friction; if (Math.abs(this.vx) < 0.01) this.vx = 0; if (Math.abs(this.vy) < 0.01) this.vy = 0; const nextX = this.x + this.vx; const nextY = this.y + this.vy;
-        if (gracePeriodTimer <= 0) { for (const enemy of enemies) { if (this.isCollidingWith(enemy, nextX, nextY)) { currentCombatGangId = enemy.gangId; const aggroList = enemies.filter(e => e.gangId === enemy.gangId); CombatSystem.start(this, aggroList); return; } } }
-        if (!this.checkWallCollision(nextX, this.y)) this.x += this.vx; else this.vx = 0; if (!this.checkWallCollision(this.x, nextY)) this.y += this.vy; else this.vy = 0;
+        
+        if (this.heroClass === 'Général') {
+            if (keys['ArrowUp'] || keys['z'] || keys['Z']) this.vy -= this.acceleration; 
+            if (keys['ArrowDown'] || keys['s'] || keys['S']) this.vy += this.acceleration; 
+            if (keys['ArrowLeft'] || keys['q'] || keys['Q']) this.vx -= this.acceleration; 
+            if (keys['ArrowRight'] || keys['d'] || keys['D']) this.vx += this.acceleration;
+            
+            this.vx *= this.friction; this.vy *= this.friction; 
+            if (Math.abs(this.vx) < 0.01) this.vx = 0; if (Math.abs(this.vy) < 0.01) this.vy = 0; 
+            const nextX = this.x + this.vx; const nextY = this.y + this.vy;
+
+            // --- NOUVEAUTÉ : On enregistre la position SI on bouge ---
+            if (Math.abs(this.vx) > 0 || Math.abs(this.vy) > 0) {
+                positionHistory.unshift({ x: this.x, y: this.y });
+                // On garde juste assez d'historique pour les 3 alliés (3 * DELAY)
+                if (positionHistory.length > HISTORY_DELAY * 3) {
+                    positionHistory.pop();
+                }
+            }
+
+            if (gracePeriodTimer <= 0) { 
+                for (const enemy of enemies) { 
+                    if (this.isCollidingWith(enemy, nextX, nextY)) { 
+                        currentCombatGangId = enemy.gangId; 
+                        const aggroList = enemies.filter(e => e.gangId === enemy.gangId); 
+                        CombatSystem.start(party, aggroList); 
+                        return; 
+                    } 
+                } 
+            }
+            if (!this.checkWallCollision(nextX, this.y)) this.x += this.vx; else this.vx = 0; 
+            if (!this.checkWallCollision(this.x, nextY)) this.y += this.vy; else this.vy = 0;
+        } 
+        else {
+            // --- NOUVEAUTÉ : Logique de suivi pour les alliés ---
+            let indexInParty = party.indexOf(this);
+            // On calcule quelle position dans l'historique cet allié doit prendre
+            let historyIndex = (indexInParty * HISTORY_DELAY) - 1;
+            
+            if (positionHistory.length > historyIndex && historyIndex >= 0) {
+                this.x = positionHistory[historyIndex].x;
+                this.y = positionHistory[historyIndex].y;
+            }
+        }
     }
+
     draw(ctx: CanvasRenderingContext2D) {
         ctx.save(); if (gracePeriodTimer > 0 && Math.floor(Date.now() / 100) % 2 === 0) ctx.globalAlpha = 0.5; 
-        ctx.fillStyle = '#3498db'; ctx.fillRect(this.x, this.y, this.width, this.height); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(this.x, this.y, this.width, this.height);
-        if (this.activeModifiers.includes('burning')) { ctx.fillStyle = 'rgba(255, 100, 0, 0.4)'; ctx.fillRect(this.x, this.y, this.width, this.height); } else if (this.activeModifiers.includes('poisoned')) { ctx.fillStyle = 'rgba(128, 0, 128, 0.4)'; ctx.fillRect(this.x, this.y, this.width, this.height); } else if (this.activeModifiers.includes('muddy')) { ctx.fillStyle = 'rgba(139, 69, 19, 0.6)'; ctx.fillRect(this.x, this.y, this.width, this.height); }
+        
+        if (this.heroClass === 'Général') ctx.fillStyle = '#3498db';
+        else if (this.heroClass === 'Mage') ctx.fillStyle = '#9b59b6';
+        else if (this.heroClass === 'Tank') ctx.fillStyle = '#f1c40f';
+        else if (this.heroClass === 'Berserker') ctx.fillStyle = '#e74c3c';
+
+        ctx.fillRect(this.x, this.y, this.width, this.height); 
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(this.x, this.y, this.width, this.height);
+        
+        if (this.activeModifiers.includes('burning')) { ctx.fillStyle = 'rgba(255, 100, 0, 0.4)'; ctx.fillRect(this.x, this.y, this.width, this.height); } 
+        else if (this.activeModifiers.includes('poisoned')) { ctx.fillStyle = 'rgba(128, 0, 128, 0.4)'; ctx.fillRect(this.x, this.y, this.width, this.height); } 
+        else if (this.activeModifiers.includes('muddy')) { ctx.fillStyle = 'rgba(139, 69, 19, 0.6)'; ctx.fillRect(this.x, this.y, this.width, this.height); }
+        
         ctx.restore(); this.drawActionAndIcons(ctx, currentGameState === 'COMBAT');
     }
 }
+
 
 export class Enemy extends Entity {
     gangId: number; isMandatory: boolean;
@@ -253,9 +325,21 @@ export class Enemy extends Entity {
     }
 }
 
-export const player = new Player(0, 0); export const chest = new Chest(); export const stairs = new Stairs();
+// --- NOUVEAUTÉ : Le Groupe de 4 ---
+export const party: Player[] = [
+    new Player(0, 0, 'Général'),
+    new Player(0, 0, 'Mage'),
+    new Player(0, 0, 'Tank'),
+    new Player(0, 0, 'Berserker')
+];
+export const player = party[0]; // Raccourci vers le leader pour l'exploration
+
+export const chest = new Chest(); 
+export const stairs = new Stairs();
 
 function loadNextFloor() {
+    positionHistory.length = 0; // NOUVEAUTÉ : On vide l'historique
+    mandatoryEnemiesTotal = 0; mandatoryEnemiesKilled = 0; enemies = []; stairs.isOpen = false;
     mandatoryEnemiesTotal = 0; mandatoryEnemiesKilled = 0; enemies = []; stairs.isOpen = false; const { mapBlueprint, size, mapType } = LevelGenerator.generateMap(currentFloor); currentMapType = mapType; 
     const layer1Id = Math.floor(Math.random() * 327); const layer2Id = Math.floor(Math.random() * 327); const layer1 = new BackgroundLayer(layer1Id, ROM); const layer2 = new BackgroundLayer(layer2Id, ROM);
     bgEngine = new Engine([layer1, layer2], { fps: 12, aspectRatio: 0, frameSkip: 1, alpha: [0.5, 0.5], canvas: bgCanvas }); bgEngine.animate(false);
@@ -268,7 +352,15 @@ function loadNextFloor() {
     function pickRandomSpawn(spawns: {x: number, y: number}[], avoid: {x: number, y: number}[], minGridDist: number) { spawns.sort(() => Math.random() - 0.5); for (let i = 0; i < spawns.length; i++) { const sp = spawns[i]; let isFarEnough = true; for (const pt of avoid) { if (Math.hypot(sp.x - pt.x, sp.y - pt.y) < minGridDist) { isFarEnough = false; break; } } if (isFarEnough) return spawns.splice(i, 1)[0]; } return spawns.pop(); }
     function pickNearbySpawn(spawns: {x: number, y: number}[], center: {x: number, y: number}, maxDist: number, avoid: {x: number, y: number}[]) { spawns.sort(() => Math.random() - 0.5); for (let i = 0; i < spawns.length; i++) { const sp = spawns[i]; const distToCenter = Math.hypot(sp.x - center.x, sp.y - center.y); if (distToCenter <= maxDist) { let isOccupied = false; for (const pt of avoid) { if (pt.x === sp.x && pt.y === sp.y) { isOccupied = true; break; } } if (!isOccupied) return spawns.splice(i, 1)[0]; } } return null; }
 
-    const occupiedSpaces: {x: number, y: number}[] = []; const pSpawn = pickRandomSpawn(largeSpawns, [], 0) || {x: 2, y: 2}; player.x = pSpawn.x * TILE_SIZE + 12; player.y = pSpawn.y * TILE_SIZE + 12; occupiedSpaces.push(pSpawn);
+    const occupiedSpaces: {x: number, y: number}[] = []; 
+    const pSpawn = pickRandomSpawn(largeSpawns, [], 0) || {x: 2, y: 2}; 
+    // On place tous les membres du groupe au point de départ du Général
+    party.forEach(hero => {
+        hero.x = pSpawn.x * TILE_SIZE + 12; 
+        hero.y = pSpawn.y * TILE_SIZE + 12;
+    });
+    occupiedSpaces.push(pSpawn);
+    
     const sSpawn = pickRandomSpawn(smallSpawns, occupiedSpaces, 10) || pickRandomSpawn(smallSpawns, [], 0) || {x: 3, y: 3}; stairs.setPosition(sSpawn.x, sSpawn.y); occupiedSpaces.push(sSpawn);
     const cSpawn = pickRandomSpawn(smallSpawns, occupiedSpaces, 5) || {x: 3, y: 3}; chest.setPosition(cSpawn.x, cSpawn.y); currentLoot = LevelGenerator.getRandomLoot(currentFloor, currentMapType === 'Arène'); occupiedSpaces.push(cSpawn);
 
@@ -292,8 +384,17 @@ loadNextFloor();
 
 function gameLoop() {
     if (player.floorsToSkip > 0) { currentFloor += player.floorsToSkip; player.floorsToSkip = 0; loadNextFloor(); setGameState('EXPLORE'); }
-    if (currentGameState === 'EXPLORE') EnemyAI.updateGangAggro(enemies, player);
-    player.update(); enemies.forEach(enemy => enemy.update()); CombatSystem.update(); player.updateFloatingTexts(); enemies.forEach(enemy => enemy.updateFloatingTexts());
+    // Le Général sert d'appât pour l'aggro
+    if (currentGameState === 'EXPLORE') EnemyAI.updateGangAggro(enemies, party[0]);
+    
+    // NOUVEAUTÉ : On update tout le groupe (en partant de la fin pour éviter les chevauchements visuels)
+    for (let i = party.length - 1; i >= 0; i--) {
+        party[i].update();
+        party[i].updateFloatingTexts();
+    }
+    enemies.forEach(enemy => enemy.update()); 
+    CombatSystem.update(); 
+    enemies.forEach(enemy => enemy.updateFloatingTexts());
     if (alertTimer > 0) alertTimer--;
 
     for (let i = enemies.length - 1; i >= 0; i--) { if (enemies[i].hp <= 0) { if (enemies[i].isMandatory) mandatoryEnemiesKilled++; enemies.splice(i, 1); } }
@@ -328,7 +429,11 @@ function gameLoop() {
         ctx.save(); ctx.globalAlpha = 0.45; ctx.imageSmoothingEnabled = false; ctx.drawImage(bgCanvas, 0, 0, canvas.width, canvas.height); ctx.restore();
     }
 
-    ctx.save(); ctx.translate(-cameraX, -cameraY); player.draw(ctx); 
+    ctx.save(); ctx.translate(-cameraX, -cameraY); 
+    // NOUVEAUTÉ : On dessine d'abord le dernier (Berserker) pour que le Général (index 0) s'affiche toujours "au-dessus" des autres
+    for (let i = party.length - 1; i >= 0; i--) {
+        party[i].draw(ctx);
+    }
     
     if (currentGameState === 'EXPLORE') {
         UIManager.drawInteraction(ctx, player, chest);
@@ -336,7 +441,7 @@ function gameLoop() {
     }
 
     if (currentGameState === 'COMBAT' && activeEnemies.length > 0) {
-        activeEnemies.forEach(e => { e.draw(ctx); if (!isIntroAnimating) e.drawStatsBars(ctx); }); if (!isIntroAnimating) player.drawStatsBars(ctx);
+        activeEnemies.forEach(e => { e.draw(ctx); if (!isIntroAnimating) e.drawStatsBars(ctx); }); if (!isIntroAnimating) activePlayer.drawStatsBars(ctx);
         if (combatSubState === 'TARGET_SELECT' && activeEnemies[currentTargetIndex]) { const target = activeEnemies[currentTargetIndex]; ctx.fillStyle = '#f1c40f'; ctx.beginPath(); ctx.moveTo(target.x - 30, target.y + target.height/2); ctx.lineTo(target.x - 10, target.y + target.height/2 - 15); ctx.lineTo(target.x - 10, target.y + target.height/2 + 15); ctx.fill(); }
     }
     
