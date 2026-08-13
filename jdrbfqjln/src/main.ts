@@ -76,7 +76,7 @@ window.addEventListener('keydown', (e) => {
             if (distStairs < 80 && stairs.isOpen) { currentFloor++; loadNextFloor(); }
         }
     }
-    else if (currentGameState === 'INVENTORY') InventorySystem.handleInput(e.key, player);
+    else if (currentGameState === 'INVENTORY') InventorySystem.handleInput(e.key, party); // NOUVEAU : On passe le party complet
     else if (currentGameState === 'DEBUG') {
         const types: MapType[] = ['Labyrinthe', 'Arène', 'Manoir'];
         if (e.key === 'ArrowUp' || e.key.toLowerCase() === 'z') { debugSelectedIndex--; if (debugSelectedIndex < 0) debugSelectedIndex = debugOptions.length - 1; }
@@ -99,6 +99,19 @@ window.addEventListener('keydown', (e) => {
     }
 });
 window.addEventListener('keyup', (e) => { keys[e.key] = false; });
+// NOUVEAUTÉ : Écouteur pour la souris (clic sur les icônes du haut)
+window.addEventListener('mousedown', (e) => {
+    if (currentGameState === 'INVENTORY') {
+        const rect = canvas.getBoundingClientRect();
+        // On compense le redimensionnement pour cibler les bons pixels
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const mouseX = (e.clientX - rect.left) * scaleX;
+        const mouseY = (e.clientY - rect.top) * scaleY;
+        
+        InventorySystem.handleClick(mouseX, mouseY, canvas.width, party.length);
+    }
+});
 
 abstract class Tile { x: number; y: number; size: number; isSolid: boolean; constructor(x: number, y: number, size: number, isSolid: boolean) { this.x = x; this.y = y; this.size = size; this.isSolid = isSolid; } abstract draw(ctx: CanvasRenderingContext2D): void; }
 class Floor extends Tile { constructor(x: number, y: number, size: number) { super(x, y, size, false); } draw(ctx: CanvasRenderingContext2D) { ctx.fillStyle = '#2a2a2a'; ctx.fillRect(this.x, this.y, this.size, this.size); ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.strokeRect(this.x, this.y, this.size, this.size); } }
@@ -464,7 +477,7 @@ function gameLoop() {
     if (currentGameState === 'EXPLORE') { UIManager.drawExplorationHUD(ctx, canvas.width, player, alertMessage, alertTimer, currentFloor, Math.max(0, mandatoryEnemiesTotal - mandatoryEnemiesKilled), enemies.length); }
     if (currentGameState === 'COMBAT') UIManager.drawCombatMenu(ctx, canvas.width, canvas.height, activePlayer, currentTargetIndex);
     UIManager.drawCombatIntro(ctx, canvas.width, canvas.height);
-    if (currentGameState === 'INVENTORY') UIManager.drawInventory(ctx, canvas.width, canvas.height, player);
+    if (currentGameState === 'INVENTORY') UIManager.drawInventory(ctx, canvas.width, canvas.height, party);
     if (currentGameState === 'DEBUG') UIManager.drawDebugMenu(ctx, canvas.width, canvas.height, player, currentFloor, debugNextMapType, debugSelectedIndex);
     if (currentGameState === 'GAME_OVER') UIManager.drawGameOver(ctx, canvas.width, canvas.height, currentGameOverMessage);
 

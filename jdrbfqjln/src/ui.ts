@@ -3,8 +3,7 @@ import { weaponsDB } from './weapons';
 import { armorsDB } from './armors';
 import { itemsDB } from './items';
 import { skillsDB, getDynamicSkill } from './skills';
-import { playerBag, currentTab, selectedIndex, getGroupedItems, getWeaponBoost, getArmorDefBoost, calculatePpMult, inventorySubState, replaceTargetIndex, type EquipmentItem, getGradeMultiplier } from './inventory'; 
-import { combatSubState, currentMenuIndex, combatMenuOptions, currentSkillIndex, pendingSkill, isIntroAnimating, introAnimationTimer, INTRO_ANIMATION_DURATION } from './combat';
+import { playerBag, currentTab, selectedIndex, getGroupedItems, getWeaponBoost, getArmorDefBoost, calculatePpMult, inventorySubState, replaceTargetIndex, type EquipmentItem, getGradeMultiplier, currentPartyIndex } from './inventory';import { combatSubState, currentMenuIndex, combatMenuOptions, currentSkillIndex, pendingSkill, isIntroAnimating, introAnimationTimer, INTRO_ANIMATION_DURATION } from './combat';
 
 export const elementColors: Record<string, string> = { 'normal': '#bdc3c7', 'feu': '#e74c3c', 'eau': '#3498db', 'plante': '#2ecc71', 'poison': '#9b59b6' };
 
@@ -75,16 +74,54 @@ export const UIManager = {
         }
     },
 
-    drawInventory(ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number, player: any) {
+    drawInventory(ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number, party: any[]) {
+        const player = party[currentPartyIndex]; // On lit le joueur actuellement ciblé
+
         ctx.fillStyle = 'rgba(0, 0, 0, 0.9)'; ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-        const margin = 50; const width = canvasWidth - margin * 2; const height = canvasHeight - margin * 2;
-        ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.strokeRect(margin, margin, width, height);
+        
+        // --- NOUVEAUTÉ : Dessin des icônes de personnages en haut ---
+        const iconSize = 40; const spacing = 15;
+        const startX = canvasWidth / 2 - ((party.length * iconSize + (party.length - 1) * spacing) / 2);
+        
+        for (let i = 0; i < party.length; i++) {
+            const px = startX + i * (iconSize + spacing);
+            const py = 15;
 
-        const leftWidth = width * 0.35; const leftX = margin + 20; const rightEdgeX = margin + leftWidth - 20; 
-        ctx.fillStyle = '#2c3e50'; ctx.fillRect(margin, margin, leftWidth, height); ctx.strokeRect(margin, margin, leftWidth, height);
-        ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 26px Arial'; ctx.textAlign = 'center'; ctx.fillText("PERSONNAGE", margin + leftWidth / 2, margin + 40);
+            // Halo jaune si c'est le personnage sélectionné
+            if (i === currentPartyIndex) {
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(px - 4, py - 4, iconSize + 8, iconSize + 8);
+            }
 
-        ctx.textAlign = 'left'; ctx.font = 'bold 20px Arial'; let currentY = margin + 80;
+            if (party[i].heroClass === 'Général') ctx.fillStyle = '#3498db';
+            else if (party[i].heroClass === 'Mage') ctx.fillStyle = '#9b59b6';
+            else if (party[i].heroClass === 'Tank') ctx.fillStyle = '#f1c40f';
+            else if (party[i].heroClass === 'Berserker') ctx.fillStyle = '#e74c3c';
+
+            ctx.fillRect(px, py, iconSize, iconSize);
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(px, py, iconSize, iconSize);
+
+            // Raccourci Clavier
+            ctx.fillStyle = 'white'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'center';
+            ctx.fillText((i + 1).toString(), px + iconSize / 2, py + iconSize / 2 + 6);
+            
+            // Jauge de HP sous l'icône
+            ctx.fillStyle = '#e74c3c'; ctx.fillRect(px, py + iconSize + 5, iconSize, 4);
+            ctx.fillStyle = '#2ecc71'; ctx.fillRect(px, py + iconSize + 5, iconSize * Math.max(0, party[i].hp / party[i].maxHp), 4);
+        }
+        ctx.textAlign = 'left';
+
+        // --- Interface Inventaire (Descendue de 35px) ---
+        const marginX = 50; const marginY = 85; 
+        const width = canvasWidth - marginX * 2; const height = canvasHeight - marginY - 40;
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.strokeRect(marginX, marginY, width, height);
+
+        const leftWidth = width * 0.35; const leftX = marginX + 20; const rightEdgeX = marginX + leftWidth - 20; 
+        ctx.fillStyle = '#2c3e50'; ctx.fillRect(marginX, marginY, leftWidth, height); ctx.strokeRect(marginX, marginY, leftWidth, height);
+        ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 26px Arial'; ctx.textAlign = 'center'; 
+        ctx.fillText(player.name.toUpperCase(), marginX + leftWidth / 2, marginY + 40);
+
+        ctx.textAlign = 'left'; ctx.font = 'bold 20px Arial'; let currentY = marginY + 80;
         
         ctx.fillStyle = '#2ecc71'; ctx.fillText("HP :", leftX, currentY); ctx.fillStyle = 'white'; ctx.fillText(`${player.hp} / ${player.maxHp}`, leftX + 60, currentY);
         ctx.fillStyle = '#7f8c8d'; ctx.font = 'italic 18px Arial'; ctx.textAlign = 'right'; ctx.fillText(`(${player.baseMaxHp})`, rightEdgeX, currentY);
@@ -103,9 +140,7 @@ export const UIManager = {
         if (wpn && wpn.element !== 'normal') {
             const pctElem = Math.round(wpn.elementPercent * 100); const pctNorm = 100 - pctElem;
             ctx.fillStyle = elementColors['normal']; ctx.fillText(`${pctNorm}% Normal`, leftX + 15, currentY);
-            const offset = leftX + 15 + ctx.measureText(`${pctNorm}% Normal`).width;
-            ctx.fillStyle = 'white'; ctx.fillText(` / `, offset, currentY);
-            ctx.fillStyle = elementColors[wpn.element]; ctx.fillText(`${pctElem}% ${wpn.element.toUpperCase()}`, offset + 15, currentY);
+            const offset = leftX + 15 + ctx.measureText(`${pctNorm}% Normal`).width; ctx.fillStyle = 'white'; ctx.fillText(` / `, offset, currentY); ctx.fillStyle = elementColors[wpn.element]; ctx.fillText(`${pctElem}% ${wpn.element.toUpperCase()}`, offset + 15, currentY);
         } else { ctx.fillStyle = elementColors['normal']; ctx.fillText(`100% Normal`, leftX + 15, currentY); }
         currentY += 40; 
 
@@ -131,57 +166,42 @@ export const UIManager = {
             });
         }
 
-        const rightX = margin + leftWidth; ctx.font = 'bold 20px Arial'; const tabY = margin + 40;
+        const rightX = marginX + leftWidth; ctx.font = 'bold 20px Arial'; const tabY = marginY + 40;
         ctx.fillStyle = currentTab === 'weapons' ? '#f1c40f' : 'white'; ctx.fillText("ARMES", rightX + 20, tabY);
         ctx.fillStyle = currentTab === 'armors' ? '#f1c40f' : 'white'; ctx.fillText("ARMURES", rightX + 120, tabY);
         ctx.fillStyle = currentTab === 'items' ? '#f1c40f' : 'white'; ctx.fillText("OBJETS", rightX + 240, tabY);
         ctx.fillStyle = currentTab === 'manuscripts' ? '#f1c40f' : 'white'; ctx.fillText("MANUSCRITS", rightX + 345, tabY); 
-        ctx.beginPath(); ctx.moveTo(rightX, margin + 60); ctx.lineTo(margin + width, margin + 60); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(rightX, marginY + 60); ctx.lineTo(marginX + width, marginY + 60); ctx.stroke();
 
         ctx.font = '20px Arial';
-        
         let actualList: any[] = [];
-        if (currentTab === 'items') actualList = getGroupedItems();
-        else actualList = playerBag[currentTab];
-        
+        if (currentTab === 'items') actualList = getGroupedItems(); else actualList = playerBag[currentTab];
         const listLength = actualList.length;
 
-        if (listLength === 0) { ctx.fillStyle = '#7f8c8d'; ctx.fillText("Vide.", rightX + 30, margin + 100); } 
+        if (listLength === 0) { ctx.fillStyle = '#7f8c8d'; ctx.fillText("Vide.", rightX + 30, marginY + 100); } 
         else {
-            const availableSpaceY = height - 180; 
-            const MAX_VISIBLE = Math.max(3, Math.floor(availableSpaceY / 35));
-
+            const availableSpaceY = height - 180; const MAX_VISIBLE = Math.max(3, Math.floor(availableSpaceY / 35));
             let startIndex = Math.max(0, selectedIndex - Math.floor(MAX_VISIBLE / 2));
             if (startIndex + MAX_VISIBLE > listLength) startIndex = Math.max(0, listLength - MAX_VISIBLE);
             const endIndex = Math.min(listLength, startIndex + MAX_VISIBLE);
 
-            if (startIndex > 0) { ctx.fillStyle = '#bdc3c7'; ctx.font = 'italic 14px Arial'; ctx.fillText("▲ Haut de la liste", rightX + 30, margin + 85); ctx.font = '20px Arial'; }
+            if (startIndex > 0) { ctx.fillStyle = '#bdc3c7'; ctx.font = 'italic 14px Arial'; ctx.fillText("▲ Haut de la liste", rightX + 30, marginY + 85); ctx.font = '20px Arial'; }
 
             for (let i = startIndex; i < endIndex; i++) {
                 const itemObj = actualList[i]; let text = ""; let color = 'white';
 
-                if (currentTab === 'items') {
-                    const itemName = itemsDB[itemObj.id].name; text = itemObj.count > 1 ? `${itemName} x${itemObj.count}` : itemName;
-                } 
-                else if (currentTab === 'weapons') { 
-                    const dbItem = weaponsDB[itemObj.id]; text = `${dbItem.name} [${itemObj.grade}] +${itemObj.level}`; color = elementColors[dbItem.element]; 
-                }
-                else if (currentTab === 'armors') { 
-                    const dbItem = armorsDB[itemObj.id]; text = `${dbItem.name} [${itemObj.grade}] +${itemObj.level}`; color = elementColors[dbItem.element]; 
-                }
-                else if (currentTab === 'manuscripts') {
-                    const skillDb = skillsDB[itemObj.skillId]; text = `Manuscrit : ${skillDb.name} [Lvl.${itemObj.level}]`; color = elementColors[skillDb.element];
-                }
+                if (currentTab === 'items') { const itemName = itemsDB[itemObj.id].name; text = itemObj.count > 1 ? `${itemName} x${itemObj.count}` : itemName; } 
+                else if (currentTab === 'weapons') { const dbItem = weaponsDB[itemObj.id]; text = `${dbItem.name} [${itemObj.grade}] +${itemObj.level}`; color = elementColors[dbItem.element]; }
+                else if (currentTab === 'armors') { const dbItem = armorsDB[itemObj.id]; text = `${dbItem.name} [${itemObj.grade}] +${itemObj.level}`; color = elementColors[dbItem.element]; }
+                else if (currentTab === 'manuscripts') { const skillDb = skillsDB[itemObj.skillId]; text = `Manuscrit : ${skillDb.name} [Lvl.${itemObj.level}]`; color = elementColors[skillDb.element]; }
 
-                const displayIndex = i - startIndex; const y = margin + 115 + (displayIndex * 35);
+                const displayIndex = i - startIndex; const y = marginY + 115 + (displayIndex * 35);
                 if (i === selectedIndex) { ctx.fillStyle = '#f1c40f'; ctx.fillText(`▶  ${text}`, rightX + 30, y); } 
                 else { ctx.fillStyle = color; ctx.fillText(`    ${text}`, rightX + 30, y); }
             }
-
-            if (endIndex < listLength) { ctx.fillStyle = '#bdc3c7'; ctx.font = 'italic 14px Arial'; ctx.fillText("▼ Bas de la liste", rightX + 30, margin + 115 + (MAX_VISIBLE * 35) - 15); }
+            if (endIndex < listLength) { ctx.fillStyle = '#bdc3c7'; ctx.font = 'italic 14px Arial'; ctx.fillText("▼ Bas de la liste", rightX + 30, marginY + 115 + (MAX_VISIBLE * 35) - 15); }
         }
-
-        ctx.beginPath(); ctx.moveTo(rightX, margin + height - 80); ctx.lineTo(margin + width, margin + height - 80); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(rightX, marginY + height - 80); ctx.lineTo(marginX + width, marginY + height - 80); ctx.stroke();
 
         if (listLength > 0) {
             let desc = ""; let extraInfo = "";
@@ -190,12 +210,11 @@ export const UIManager = {
                 desc = itm.description; if (itm.addEvAtk || itm.addEvDef || itm.addEvHp || itm.addEvPp) extraInfo = "Objet de Boost (EV)";
             }
             else if (currentTab === 'manuscripts') {
-                const selectedItem = playerBag.manuscripts[selectedIndex];
-                const dSkill = getDynamicSkill(selectedItem.skillId, selectedItem.level);
+                const selectedItem = playerBag.manuscripts[selectedIndex]; const dSkill = getDynamicSkill(selectedItem.skillId, selectedItem.level);
                 desc = dSkill.description;
-                if (dSkill.pwr < 0) extraInfo = `Puissance Soin: ${Math.abs(dSkill.pwr).toFixed(1)} | Coût: ${dSkill.ppCost} PP`;
-                else if (dSkill.pwr === 0) extraInfo = `Statut / Buff | Coût: ${dSkill.ppCost} PP`;
-                else extraInfo = `Puissance Atk: ${dSkill.pwr.toFixed(1)} | Coût: ${dSkill.ppCost} PP`;
+                if (dSkill.pwr < 0) extraInfo = `Puissance Soin: ${Math.abs(dSkill.pwr).toFixed(1)} | Coût de base: ${dSkill.ppCost} PP`;
+                else if (dSkill.pwr === 0) extraInfo = `Statut / Buff | Coût de base: ${dSkill.ppCost} PP`;
+                else extraInfo = `Puissance Atk: ${dSkill.pwr.toFixed(1)} | Coût de base: ${dSkill.ppCost} PP`;
             }
             else {
                 const selectedItem = playerBag[currentTab][selectedIndex] as EquipmentItem;
@@ -215,32 +234,21 @@ export const UIManager = {
                 }
             }
 
-            ctx.fillStyle = '#bdc3c7'; ctx.font = 'italic 18px Arial'; ctx.fillText(desc, rightX + 30, margin + height - 50);
-            ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 18px Arial'; ctx.fillText(extraInfo, rightX + 30, margin + height - 25);
+            ctx.fillStyle = '#bdc3c7'; ctx.font = 'italic 18px Arial'; ctx.fillText(desc, rightX + 30, marginY + height - 50);
+            ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 18px Arial'; ctx.fillText(extraInfo, rightX + 30, marginY + height - 25);
         }
 
         if (inventorySubState === 'REPLACE_SKILL') {
             ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(0,0,canvasWidth, canvasHeight);
-            
-            const modalW = 500; const modalH = 320;
-            const modalX = canvasWidth/2 - modalW/2; const modalY = canvasHeight/2 - modalH/2;
-            ctx.fillStyle = '#2c3e50'; ctx.fillRect(modalX, modalY, modalW, modalH);
-            ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 4; ctx.strokeRect(modalX, modalY, modalW, modalH);
-            
-            ctx.fillStyle = 'white'; ctx.font = 'bold 22px Arial'; ctx.textAlign = 'center';
-            ctx.fillText("Le Deck (4 max) est plein. Remplacer quelle capacité ?", canvasWidth/2, modalY + 40); ctx.textAlign = 'left';
+            const modalW = 500; const modalH = 320; const modalX = canvasWidth/2 - modalW/2; const modalY = canvasHeight/2 - modalH/2;
+            ctx.fillStyle = '#2c3e50'; ctx.fillRect(modalX, modalY, modalW, modalH); ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 4; ctx.strokeRect(modalX, modalY, modalW, modalH);
+            ctx.fillStyle = 'white'; ctx.font = 'bold 22px Arial'; ctx.textAlign = 'center'; ctx.fillText("Le Deck (4 max) est plein. Remplacer quelle capacité ?", canvasWidth/2, modalY + 40); ctx.textAlign = 'left';
             
             player.skills.forEach((sObj: any, idx: number) => {
-                const dSkill = getDynamicSkill(sObj.id, sObj.level);
-                const textY = modalY + 100 + (idx * 45);
-                if (idx === replaceTargetIndex) {
-                    ctx.fillStyle = '#f1c40f'; ctx.fillText(`▶ ${dSkill.name} [Lv.${sObj.level}]`, modalX + 50, textY);
-                } else {
-                    ctx.fillStyle = 'white'; ctx.fillText(`  ${dSkill.name} [Lv.${sObj.level}]`, modalX + 50, textY);
-                }
+                const dSkill = getDynamicSkill(sObj.id, sObj.level); const textY = modalY + 100 + (idx * 45);
+                if (idx === replaceTargetIndex) { ctx.fillStyle = '#f1c40f'; ctx.fillText(`▶ ${dSkill.name} [Lv.${sObj.level}]`, modalX + 50, textY); } else { ctx.fillStyle = 'white'; ctx.fillText(`  ${dSkill.name} [Lv.${sObj.level}]`, modalX + 50, textY); }
             });
-            ctx.fillStyle = '#7f8c8d'; ctx.font = '16px Arial'; ctx.textAlign = 'center';
-            ctx.fillText("Appuyez sur Entrée pour écraser, Échap pour annuler.", canvasWidth/2, modalY + modalH - 20); ctx.textAlign = 'left';
+            ctx.fillStyle = '#7f8c8d'; ctx.font = '16px Arial'; ctx.textAlign = 'center'; ctx.fillText("Appuyez sur Entrée pour écraser, Échap pour annuler.", canvasWidth/2, modalY + modalH - 20); ctx.textAlign = 'left';
         }
     },
 
