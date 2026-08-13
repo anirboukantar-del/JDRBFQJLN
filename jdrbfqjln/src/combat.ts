@@ -540,10 +540,27 @@ export const CombatSystem = {
     },
 
     end(isFleeing: boolean = false) {
-        // Retour à la formation "Exploration"
-        activeParty.forEach(p => { p.isDefending = false; p.isActing = false; });
-        preCombatEnemies.forEach(pe => { if (activeEnemies.includes(pe.enemy)) { pe.enemy.x = pe.x; pe.enemy.y = pe.y; pe.enemy.isDefending = false; pe.enemy.isActing = false; } });
-        currentGameState = 'EXPLORE'; activeEnemies = []; activePlayer = null;
+        // --- LA LIGNE MAGIQUE QUI MANQUAIT ---
+        // On replace le Général et TOUS ses alliés à la position d'avant-combat !
+        activeParty.forEach(p => { 
+            p.x = preCombatPlayerX; 
+            p.y = preCombatPlayerY; 
+            p.isDefending = false; 
+            p.isActing = false; 
+        });
+
+        preCombatEnemies.forEach(pe => { 
+            if (activeEnemies.includes(pe.enemy)) { 
+                pe.enemy.x = pe.x; 
+                pe.enemy.y = pe.y; 
+                pe.enemy.isDefending = false; 
+                pe.enemy.isActing = false; 
+            } 
+        });
+        
+        currentGameState = 'EXPLORE'; 
+        activeEnemies = []; 
+        activePlayer = null;
         if (isFleeing) gracePeriodTimer = 120;
     }
 };
