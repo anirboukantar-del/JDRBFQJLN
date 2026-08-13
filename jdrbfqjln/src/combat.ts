@@ -226,7 +226,13 @@ export const CombatSystem = {
         activeParty = [...party]; 
         activeEnemies = [...encounteredEnemies];
         
-        preCombatPlayerX = activeParty[0].x; preCombatPlayerY = activeParty[0].y; 
+        // --- NOUVEAUTÉ : On enregistre une position parfaitement sécurisée ---
+        // On demande au Général (party[0]) de nous donner le centre d'une case valide
+        const safePos = party[0].getSafeFloorPosition();
+        preCombatPlayerX = safePos.x; 
+        preCombatPlayerY = safePos.y; 
+        // ---------------------------------------------------------------------
+
         preCombatEnemies = activeEnemies.map(e => ({ enemy: e, x: e.x, y: e.y }));
         
         activeParty.forEach(hero => { hero.vx = 0; hero.vy = 0; hero.isDefending = false; hero.isActing = false; });
@@ -234,7 +240,7 @@ export const CombatSystem = {
 
         queuedPartyActions = [];
         currentPlayerSelectIndex = 0;
-        advanceToNextAlivePlayerForSelection(); // Trouve le 1er héros en vie
+        advanceToNextAlivePlayerForSelection(); 
 
         positionEntitiesForCombat(activeParty, activeEnemies); 
         isIntroAnimating = true; introAnimationTimer = 0;

@@ -149,6 +149,39 @@ export class Entity {
         for (let row = topRow; row <= bottomRow; row++) { for (let col = leftCol; col <= rightCol; col++) { if (row < 0 || row >= gameMap.length || col < 0 || col >= gameMap[0].length) return true; if (gameMap[row][col].isSolid) return true; } } return false;
     }
 
+    // NOUVEAUTÉ : Trouve le centre de la case "Floor" valide la plus proche
+    getSafeFloorPosition(): { x: number, y: number } {
+        const centerCol = Math.floor((this.x + this.width / 2) / TILE_SIZE);
+        const centerRow = Math.floor((this.y + this.height / 2) / TILE_SIZE);
+        
+        // On vérifie d'abord la case actuelle, puis celles autour (haut, bas, gauche, droite)
+        const checkOffsets = [
+            { r: 0, c: 0 }, { r: -1, c: 0 }, { r: 1, c: 0 }, { r: 0, c: -1 }, { r: 0, c: 1 },
+            { r: -1, c: -1 }, { r: -1, c: 1 }, { r: 1, c: -1 }, { r: 1, c: 1 }
+        ];
+
+        for (const offset of checkOffsets) {
+            const checkRow = centerRow + offset.r;
+            const checkCol = centerCol + offset.c;
+
+            // Si la case est dans la map et que c'est un sol (non solide)
+            if (
+                checkRow >= 0 && checkRow < gameMap.length &&
+                checkCol >= 0 && checkCol < gameMap[0].length &&
+                !gameMap[checkRow][checkCol].isSolid
+            ) {
+                // On retourne les coordonnées parfaitement centrées sur cette case
+                return {
+                    x: (checkCol * TILE_SIZE) + (TILE_SIZE / 2) - (this.width / 2),
+                    y: (checkRow * TILE_SIZE) + (TILE_SIZE / 2) - (this.height / 2)
+                };
+            }
+        }
+        
+        // Sécurité ultime : retourne la position actuelle si rien n'est trouvé
+        return { x: this.x, y: this.y };
+    }
+
     get maxHp(): number { return this.baseMaxHp + Math.floor(this.evHp / 4); }
     get maxPp(): number { return this.baseMaxPp + Math.floor(this.evPp / 4); }
     get atk(): number { return this.baseAtk + Math.floor(this.evAtk / 4); }
