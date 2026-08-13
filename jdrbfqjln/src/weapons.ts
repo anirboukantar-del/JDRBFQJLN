@@ -58,7 +58,7 @@ export const weaponsDB: Record<string, Weapon> = {
     },
     baton_soleil: {
         id: 'baton_soleil', name: 'Bâton Soleil', description: 'ATK -50%, PP Spé -75%, Pwr Spé +25%, Bâton qui canalise la puissance du soleil',
-        atkBoost: 0, element: 'feu', elementPercent: 10,
+        atkBoost: 0, element: 'feu', elementPercent: 1.0,
         atkMultiplier: -0.50, spCostPenalty: -0.75, spAtkBonus: 0.25, isMagic: true
     }
 };
