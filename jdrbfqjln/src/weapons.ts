@@ -16,6 +16,7 @@ export interface Weapon {
     atkMultiplier?: number;
     defMultiplier?: number;
     fearChanceBonus?: number; // NOUVEAUTÉ
+    isMagic?: boolean;
 }
 
 export const weaponsDB: Record<string, Weapon> = {
@@ -35,14 +36,13 @@ export const weaponsDB: Record<string, Weapon> = {
     },
     poings_lave: { id: 'poings_lave', name: 'Poings Lave', description: 'Brûlent tout ce qu\'ils touchent.', atkBoost: 12, element: 'feu', elementPercent: 1.0 },
     lance_tenebre: { id: 'lance_tenebre', name: 'Lance Ténèbre', description: 'Haut risque d\'empoisonnement (+30%).', atkBoost: 20, element: 'poison', elementPercent: 0.6, poisonChanceBonus: 0.30 },
-    tournesol: { id: 'tournesol', name: 'Tournesol', description: 'Amplifie les soins de 30%.', atkBoost: 5, element: 'plante', elementPercent: 1.0, healBonus: 0.30 },
-    canon_magma: { id: 'canon_magma', name: 'Canon Magma', description: 'Attaques Spé +60% Dégâts, coût en PP +80%.', atkBoost: 25, element: 'feu', elementPercent: 0.7, spAtkBonus: 0.60, spCostPenalty: 0.80 },
+    tournesol: { id: 'tournesol', name: 'Tournesol', description: 'Amplifie les soins de 30%.', atkBoost: 5, element: 'plante', elementPercent: 1.0, healBonus: 0.30, isMagic: true },
+    canon_magma: { id: 'canon_magma', name: 'Canon Magma', description: 'Attaques Spé +60% Dégâts, coût en PP +80%.', atkBoost: 25, element: 'feu', elementPercent: 0.7, spAtkBonus: 0.60, spCostPenalty: 0.80, isMagic: true },
 
-    // --- NOUVELLES ARMES ---
     baguette: { 
         id: 'baguette', name: 'Baguette', description: 'ATK -80%, PP Spé -65%, Pwr Spé +15%', 
         atkBoost: 0, element: 'normal', elementPercent: 0, 
-        atkMultiplier: -0.80, spCostPenalty: -0.65, spAtkBonus: 0.15 
+        atkMultiplier: -0.80, spCostPenalty: -0.65, spAtkBonus: 0.15, isMagic: true
     },
     baton_tung: { 
         id: 'baton_tung', name: 'Bâton Tung', description: 'Massue sauvage type Plante (30%)', 
@@ -55,5 +55,10 @@ export const weaponsDB: Record<string, Weapon> = {
     chancleta: { 
         id: 'chancleta', name: 'Chancleta', description: '+15 ATK, 8% chance de Terreur', 
         atkBoost: 15, element: 'normal', elementPercent: 0, fearChanceBonus: 0.08 
+    },
+    baton_soleil: {
+        id: 'baton_soleil', name: 'Bâton Soleil', description: 'ATK -50%, PP Spé -75%, Pwr Spé +25%, Bâton qui canalise la puissance du soleil',
+        atkBoost: 0, element: 'feu', elementPercent: 100,
+        atkMultiplier: -0.50, spCostPenalty: -0.75, spAtkBonus: 0.25, isMagic: true
     }
 };

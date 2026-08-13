@@ -9,7 +9,7 @@ export type Grade = 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
 
 export interface EquipmentItem { id: string; grade: Grade; level: number; }
 export interface ManuscriptItem { skillId: string; level: number; }
-
+export let inventoryAlert = { message: "", expire: 0 };
 export const playerBag = { weapons: [] as EquipmentItem[], armors: [] as EquipmentItem[], items: [] as string[], manuscripts: [] as ManuscriptItem[] };
 export let currentTab: 'weapons' | 'armors' | 'items' | 'manuscripts' = 'weapons';
 export let selectedIndex = 0;
@@ -56,7 +56,7 @@ export const InventorySystem = {
     },
 
     handleInput(key: string, party: any[]) {
-        // Sélection via les touches du clavier
+        // --- SÉLECTION DU PERSONNAGE (1, 2, 3, 4) ---
         if (key === '1' && party.length > 0) { currentPartyIndex = 0; return; }
         if (key === '2' && party.length > 1) { currentPartyIndex = 1; return; }
         if (key === '3' && party.length > 2) { currentPartyIndex = 2; return; }
@@ -64,46 +64,113 @@ export const InventorySystem = {
 
         const player = party[currentPartyIndex];
 
+        // --- GESTION DU REMPLACEMENT DE COMPÉTENCE ---
         if (inventorySubState === 'REPLACE_SKILL') {
             if (key === 'Escape') { inventorySubState = 'NORMAL'; return; }
             if (key === 'ArrowUp' || key.toLowerCase() === 'z') { replaceTargetIndex--; if (replaceTargetIndex < 0) replaceTargetIndex = player.skills.length - 1; }
             if (key === 'ArrowDown' || key.toLowerCase() === 's') { replaceTargetIndex++; if (replaceTargetIndex >= player.skills.length) replaceTargetIndex = 0; }
             if (key === 'Enter' || key === ' ') {
-                const manu = playerBag.manuscripts[selectedIndex]; player.skills[replaceTargetIndex] = { id: manu.skillId, level: manu.level };
-                playerBag.manuscripts.splice(selectedIndex, 1); inventorySubState = 'NORMAL'; if (selectedIndex >= playerBag.manuscripts.length) selectedIndex = Math.max(0, playerBag.manuscripts.length - 1);
-            } return;
+                const manu = playerBag.manuscripts[selectedIndex]; 
+                player.skills[replaceTargetIndex] = { id: manu.skillId, level: manu.level };
+                playerBag.manuscripts.splice(selectedIndex, 1); 
+                inventorySubState = 'NORMAL'; 
+                if (selectedIndex >= playerBag.manuscripts.length) selectedIndex = Math.max(0, playerBag.manuscripts.length - 1);
+            } 
+            return;
         }
+
         if (key === 'Escape' || key.toLowerCase() === 'w') { setGameState('EXPLORE'); return; }
 
+        // --- NAVIGATION DANS LES ONGLETS ---
         let listLength = 0;
-        if (currentTab === 'items') listLength = getGroupedItems().length; else if (currentTab === 'manuscripts') listLength = playerBag.manuscripts.length; else listLength = playerBag[currentTab].length;
+        if (currentTab === 'items') listLength = getGroupedItems().length; 
+        else if (currentTab === 'manuscripts') listLength = playerBag.manuscripts.length; 
+        else listLength = playerBag[currentTab].length;
 
         if (key === 'ArrowRight' || key.toLowerCase() === 'd') { if (currentTab === 'weapons') currentTab = 'armors'; else if (currentTab === 'armors') currentTab = 'items'; else if (currentTab === 'items') currentTab = 'manuscripts'; selectedIndex = 0; }
         else if (key === 'ArrowLeft' || key.toLowerCase() === 'q') { if (currentTab === 'manuscripts') currentTab = 'items'; else if (currentTab === 'items') currentTab = 'armors'; else if (currentTab === 'armors') currentTab = 'weapons'; selectedIndex = 0; }
         else if (key === 'ArrowUp' || key.toLowerCase() === 'z') { selectedIndex--; if (selectedIndex < 0) selectedIndex = Math.max(0, listLength - 1); }
         else if (key === 'ArrowDown' || key.toLowerCase() === 's') { selectedIndex++; if (selectedIndex >= listLength) selectedIndex = 0; }
+        
+        // --- VALIDATION DE L'ACTION ---
         else if (key === 'Enter' || key === ' ') {
             if (listLength === 0) return;
-            if (currentTab === 'weapons') { player.equippedWeapon = playerBag.weapons[selectedIndex]; player.hp = Math.min(player.hp, player.maxHp); player.pp = Math.min(player.pp, player.totalMaxPp); }
-            else if (currentTab === 'armors') { player.equippedArmor = playerBag.armors[selectedIndex]; player.hp = Math.min(player.hp, player.maxHp); player.pp = Math.min(player.pp, player.totalMaxPp); }
+
+            if (currentTab === 'weapons') { 
+                const weaponItem = playerBag.weapons[selectedIndex];
+                const weaponData = weaponsDB[weaponItem.id];
+                
+                // RÈGLES DES ARMES
+                if (player.heroClass === 'Mage' && !weaponData.isMagic) {
+                    inventoryAlert = { message: "Le Mage ne peut équiper que des armes magiques !", expire: Date.now() + 2000 };
+                    return;
+                }
+                if ((player.heroClass === 'Tank' || player.heroClass === 'Berserker') && weaponData.isMagic) {
+                    inventoryAlert = { message: `Le ${player.heroClass} ne peut pas utiliser de magie !`, expire: Date.now() + 2000 };
+                    return;
+                }
+
+                player.equippedWeapon = weaponItem; 
+                player.hp = Math.min(player.hp, player.maxHp); 
+                player.pp = Math.min(player.pp, player.totalMaxPp); 
+            }
+            else if (currentTab === 'armors') { 
+                player.equippedArmor = playerBag.armors[selectedIndex]; 
+                player.hp = Math.min(player.hp, player.maxHp); 
+                player.pp = Math.min(player.pp, player.totalMaxPp); 
+            }
             else if (currentTab === 'items') {
                 const grouped = getGroupedItems(); const itemId = grouped[selectedIndex].id; const item = itemsDB[itemId]; let itemUsed = false;
+                
                 if (item.healHp && player.hp < player.maxHp) { player.hp = Math.min(player.maxHp, player.hp + item.healHp); itemUsed = true; }
                 if (item.healPp && player.pp < player.totalMaxPp) { player.pp = Math.min(player.totalMaxPp, player.pp + item.healPp); itemUsed = true; }
+                
                 const MAX_TOTAL_EV = 510; const MAX_STAT_EV = 255;
                 if (item.addEvAtk && player.totalEvs < MAX_TOTAL_EV && player.evAtk < MAX_STAT_EV) { player.evAtk = Math.min(MAX_STAT_EV, player.evAtk + item.addEvAtk); itemUsed = true; }
                 if (item.addEvDef && player.totalEvs < MAX_TOTAL_EV && player.evDef < MAX_STAT_EV) { player.evDef = Math.min(MAX_STAT_EV, player.evDef + item.addEvDef); itemUsed = true; }
                 if (item.addEvHp && player.totalEvs < MAX_TOTAL_EV && player.evHp < MAX_STAT_EV) { player.evHp = Math.min(MAX_STAT_EV, player.evHp + item.addEvHp); itemUsed = true; }
+                
                 if (item.cureStatus && player.activeModifiers.length > 0) { player.activeModifiers = []; itemUsed = true; }
                 if (item.skipFloors) { player.floorsToSkip = Math.floor(Math.random() * 5) + 1; itemUsed = true; }
 
-                if (itemUsed) { const idx = playerBag.items.indexOf(itemId); if (idx !== -1) playerBag.items.splice(idx, 1); const newLength = getGroupedItems().length; if (selectedIndex >= newLength) selectedIndex = Math.max(0, newLength - 1); }
+                if (itemUsed) { 
+                    const idx = playerBag.items.indexOf(itemId); 
+                    if (idx !== -1) playerBag.items.splice(idx, 1); 
+                    const newLength = getGroupedItems().length; 
+                    if (selectedIndex >= newLength) selectedIndex = Math.max(0, newLength - 1); 
+                }
             }
             else if (currentTab === 'manuscripts') {
-                const manu = playerBag.manuscripts[selectedIndex]; const existingIndex = player.skills.findIndex((s: any) => s.id === manu.skillId);
-                if (existingIndex !== -1) { player.skills[existingIndex] = { id: manu.skillId, level: manu.level }; playerBag.manuscripts.splice(selectedIndex, 1); if (selectedIndex >= playerBag.manuscripts.length) selectedIndex = Math.max(0, playerBag.manuscripts.length - 1); } 
-                else if (player.skills.length < 4) { player.skills.push({ id: manu.skillId, level: manu.level }); playerBag.manuscripts.splice(selectedIndex, 1); if (selectedIndex >= playerBag.manuscripts.length) selectedIndex = Math.max(0, playerBag.manuscripts.length - 1); } 
-                else { inventorySubState = 'REPLACE_SKILL'; replaceTargetIndex = 0; }
+                // RÈGLES DES MANUSCRITS
+                if (player.heroClass === 'Berserker') {
+                    inventoryAlert = { message: "Le Berserker refuse de lire un livre !", expire: Date.now() + 2000 };
+                    return;
+                }
+
+                const manu = playerBag.manuscripts[selectedIndex]; 
+                const skillData = skillsDB[manu.skillId];
+
+                if (player.heroClass === 'Tank' && skillData.isAdvanced) {
+                    inventoryAlert = { message: "Ce manuscrit est trop complexe pour le Tank !", expire: Date.now() + 2000 };
+                    return;
+                }
+
+                const existingIndex = player.skills.findIndex((s: any) => s.id === manu.skillId);
+                
+                if (existingIndex !== -1) { 
+                    player.skills[existingIndex] = { id: manu.skillId, level: manu.level }; 
+                    playerBag.manuscripts.splice(selectedIndex, 1); 
+                    if (selectedIndex >= playerBag.manuscripts.length) selectedIndex = Math.max(0, playerBag.manuscripts.length - 1); 
+                } 
+                else if (player.skills.length < 4) { 
+                    player.skills.push({ id: manu.skillId, level: manu.level }); 
+                    playerBag.manuscripts.splice(selectedIndex, 1); 
+                    if (selectedIndex >= playerBag.manuscripts.length) selectedIndex = Math.max(0, playerBag.manuscripts.length - 1); 
+                } 
+                else { 
+                    inventorySubState = 'REPLACE_SKILL'; 
+                    replaceTargetIndex = 0; 
+                }
             }
         }
     }

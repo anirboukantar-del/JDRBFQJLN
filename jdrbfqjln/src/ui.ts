@@ -4,6 +4,7 @@ import { armorsDB } from './armors';
 import { itemsDB } from './items';
 import { skillsDB, getDynamicSkill } from './skills';
 import { playerBag, currentTab, selectedIndex, getGroupedItems, getWeaponBoost, getArmorDefBoost, calculatePpMult, inventorySubState, replaceTargetIndex, type EquipmentItem, getGradeMultiplier, currentPartyIndex } from './inventory';import { combatSubState, currentMenuIndex, combatMenuOptions, currentSkillIndex, pendingSkill, isIntroAnimating, introAnimationTimer, INTRO_ANIMATION_DURATION } from './combat';
+import { /* ... tes autres imports ... */ inventoryAlert } from './inventory';
 
 export const elementColors: Record<string, string> = { 'normal': '#bdc3c7', 'feu': '#e74c3c', 'eau': '#3498db', 'plante': '#2ecc71', 'poison': '#9b59b6' };
 
@@ -249,6 +250,21 @@ export const UIManager = {
                 if (idx === replaceTargetIndex) { ctx.fillStyle = '#f1c40f'; ctx.fillText(`▶ ${dSkill.name} [Lv.${sObj.level}]`, modalX + 50, textY); } else { ctx.fillStyle = 'white'; ctx.fillText(`  ${dSkill.name} [Lv.${sObj.level}]`, modalX + 50, textY); }
             });
             ctx.fillStyle = '#7f8c8d'; ctx.font = '16px Arial'; ctx.textAlign = 'center'; ctx.fillText("Appuyez sur Entrée pour écraser, Échap pour annuler.", canvasWidth/2, modalY + modalH - 20); ctx.textAlign = 'left';
+        }
+
+        // --- NOUVEAUTÉ : Affichage de l'alerte de restriction d'équipement ---
+        if (Date.now() < inventoryAlert.expire) {
+            ctx.fillStyle = 'rgba(231, 76, 60, 0.95)'; // Rouge erreur
+            ctx.fillRect(canvasWidth / 2 - 300, canvasHeight / 2 - 30, 600, 60);
+            
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+            ctx.strokeRect(canvasWidth / 2 - 300, canvasHeight / 2 - 30, 600, 60);
+            
+            ctx.fillStyle = 'white'; 
+            ctx.font = 'bold 22px Arial'; 
+            ctx.textAlign = 'center';
+            ctx.fillText(inventoryAlert.message, canvasWidth / 2, canvasHeight / 2 + 8);
+            ctx.textAlign = 'left';
         }
     },
 
