@@ -60,5 +60,14 @@ export const weaponsDB: Record<string, Weapon> = {
         id: 'baton_soleil', name: 'Bâton Soleil', description: 'ATK -50%, PP Spé -75%, Pwr Spé +25%, Bâton qui canalise la puissance du soleil',
         atkBoost: 0, element: 'feu', elementPercent: 1.0,
         atkMultiplier: -0.50, spCostPenalty: -0.75, spAtkBonus: 0.25, isMagic: true
-    }
+    },
+    livre_sombre: {
+        id: 'livre_sombre', name: 'Livre Sombre', description: 'ATK -80%, PP Spé -85%, Pwr Spé +45%, Livre de magie interdite, taux de poison élevé',
+        atkBoost: 0, element: 'poison', elementPercent: 0.7,
+        atkMultiplier: -0.90, spCostPenalty: -0.85, spAtkBonus: 0.45, isMagic: true
+    },
+    trident: { 
+        id: 'trident', name: 'Trident du roi des mers', description: 'Arme aquatique légendaire', 
+        atkBoost: 40, element: 'eau', elementPercent: 0.30 
+    },
 };
